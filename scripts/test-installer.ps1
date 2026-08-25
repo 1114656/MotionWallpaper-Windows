@@ -4,6 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -LiteralPath (Join-Path $root 'VERSION') -Raw).Trim()
 if (-not $InstallerPath) {
@@ -37,6 +38,26 @@ $installRoot = Join-Path $testRoot 'custom install path'
 $installLog = Join-Path $testRoot 'install.log'
 $uninstaller = Join-Path $installRoot 'unins000.exe'
 
+function Get-AssociatedIconHash([string]$Path) {
+    $icon = [Drawing.Icon]::ExtractAssociatedIcon($Path)
+    if ($null -eq $icon) { throw "无法读取程序图标：$Path" }
+    $bitmap = $icon.ToBitmap()
+    $stream = [IO.MemoryStream]::new()
+    try {
+        $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+        $sha256 = [Security.Cryptography.SHA256]::Create()
+        try {
+            return ([BitConverter]::ToString($sha256.ComputeHash($stream.ToArray()))).Replace('-', '')
+        } finally {
+            $sha256.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+        $bitmap.Dispose()
+        $icon.Dispose()
+    }
+}
+
 try {
     New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
     $install = Start-Process -FilePath $InstallerPath -ArgumentList @(
@@ -50,6 +71,11 @@ try {
         if (-not (Test-Path -LiteralPath (Join-Path $appRoot $required) -PathType Leaf)) {
             throw "安装后缺少必需文件：$required"
         }
+    }
+    $appIconHash = Get-AssociatedIconHash (Join-Path $appRoot 'MotionWallpaper.exe')
+    $agentIconHash = Get-AssociatedIconHash (Join-Path $appRoot 'motionwallpaper-agent.exe')
+    if ($appIconHash -ne $agentIconHash) {
+        throw '常驻 Agent 没有使用与主程序相同的托盘图标资源。'
     }
     foreach ($forbidden in @('portable.mode', 'Config', 'Wallpapers')) {
         if (Test-Path -LiteralPath (Join-Path $appRoot $forbidden)) {

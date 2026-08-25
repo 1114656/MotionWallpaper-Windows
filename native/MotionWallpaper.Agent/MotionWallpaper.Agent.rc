@@ -1,0 +1,3 @@
+#include "resource.h"
+
+IDI_MOTIONWALLPAPER ICON "..\\MotionWallpaper.App\\Assets\\motion-logo.ico"

@@ -4,12 +4,33 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Drawing
 $root = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -LiteralPath (Join-Path $root 'VERSION') -Raw).Trim()
 $build = Join-Path $root 'build'
 $artifacts = Join-Path $root 'artifacts'
 $script = Join-Path $root 'installer\MotionWallpaper.iss'
 $compiler = Join-Path $root '.tools\InnoSetup\ISCC.exe'
+
+function Get-AssociatedIconHash([string]$Path) {
+    $icon = [Drawing.Icon]::ExtractAssociatedIcon($Path)
+    if ($null -eq $icon) { throw "无法读取程序图标：$Path" }
+    $bitmap = $icon.ToBitmap()
+    $stream = [IO.MemoryStream]::new()
+    try {
+        $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
+        $sha256 = [Security.Cryptography.SHA256]::Create()
+        try {
+            return ([BitConverter]::ToString($sha256.ComputeHash($stream.ToArray()))).Replace('-', '')
+        } finally {
+            $sha256.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+        $bitmap.Dispose()
+        $icon.Dispose()
+    }
+}
 
 if ($version -notmatch '^\d+\.\d+\.\d+-alpha\.\d+$') {
     throw "VERSION 格式无效：$version"
@@ -31,6 +52,11 @@ foreach ($name in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $build $name) -PathType Leaf)) {
         throw "安装负载缺少必需文件：$name"
     }
+}
+$appIconHash = Get-AssociatedIconHash (Join-Path $build 'MotionWallpaper.exe')
+$agentIconHash = Get-AssociatedIconHash (Join-Path $build 'motionwallpaper-agent.exe')
+if ($appIconHash -ne $agentIconHash) {
+    throw '常驻 Agent 没有使用与主程序相同的托盘图标资源。'
 }
 
 $allowedLanguages = @('zh-CN', 'en-us')

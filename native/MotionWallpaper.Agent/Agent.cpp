@@ -13,6 +13,7 @@
 #include "CoveragePolicy.h"
 #include "IdlePolicy.h"
 #include "RandomSelectionPolicy.h"
+#include "resource.h"
 #include "RuntimePolicy.h"
 #include "SharedRendererPolicy.h"
 #include "VideoOptimizer.h"
@@ -794,7 +795,10 @@ namespace
             icon.uID = trayIconId;
             icon.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
             icon.uCallbackMessage = wmTrayIcon;
-            icon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+            icon.hIcon = static_cast<HICON>(LoadImageW(
+                GetModuleHandleW(nullptr), MAKEINTRESOURCEW(IDI_MOTIONWALLPAPER), IMAGE_ICON,
+                GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+            if (!icon.hIcon) icon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
             wcscpy_s(icon.szTip, L"MotionWallpaper");
             Shell_NotifyIconW(NIM_ADD, &icon);
             icon.uVersion = NOTIFYICON_VERSION_4;
