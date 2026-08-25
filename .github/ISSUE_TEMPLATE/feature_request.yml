@@ -1,0 +1,26 @@
+name: 功能建议
+description: 建议一个明确、聚焦的改进
+title: "[建议] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 用户问题
+      description: 请先描述需要解决的问题，再说明具体实现建议。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议行为
+      description: 请说明期望的交互方式和默认设置。
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: 性能与兼容性
+      description: >-
+        请说明可能对流畅度、画质、CPU/GPU、内存、电池、多显示器或旧版
+        Windows 造成的影响。

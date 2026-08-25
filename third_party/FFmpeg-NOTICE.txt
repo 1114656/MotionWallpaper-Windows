@@ -1,0 +1,9 @@
+MotionWallpaper invokes an unmodified FFmpeg executable as an optional,
+separate background media-preparation tool.
+
+Build distribution: BtbN/FFmpeg-Builds, Windows x64 LGPL shared build 8.1
+Project: https://github.com/BtbN/FFmpeg-Builds
+FFmpeg source and license information: https://ffmpeg.org/
+
+The accompanying FFmpeg libraries are dynamically linked and distributed
+under GNU LGPL v3. See LICENSE-FFmpeg.txt in this directory.

@@ -1,0 +1,67 @@
+name: Native CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Restore, build, and test
+        shell: pwsh
+        run: |
+          $logPath = Join-Path $env:RUNNER_TEMP 'native-build.log'
+          try {
+            & .\scripts\build-native.ps1 -SkipPublish *>&1 |
+              Tee-Object -FilePath $logPath
+            if ($LASTEXITCODE -ne 0) {
+              throw "构建脚本退出码：$LASTEXITCODE"
+            }
+          } catch {
+            $_ | Out-String | Tee-Object -FilePath $logPath -Append | Write-Host
+            throw
+          }
+
+      - name: Publish failure diagnosis
+        if: failure()
+        shell: pwsh
+        run: |
+          $logPath = Join-Path $env:RUNNER_TEMP 'native-build.log'
+          if (-not (Test-Path -LiteralPath $logPath)) {
+            Write-Host '::error title=Native CI 失败::构建步骤未生成诊断日志。'
+            exit 0
+          }
+          $pattern = '(?i)(MotionWallpaper native tests failed|Native (restore|build|tests) failed|fatal error|:\s*error\s+(MSB|C|LNK|NU)\d+|exception|构建脚本退出码|生成失败|测试失败)'
+          $matches = @(Select-String -LiteralPath $logPath -Pattern $pattern |
+            Select-Object -Last 20 | ForEach-Object {
+              $line = $_.Line.Trim()
+              if ($line.Length -gt 600) { $line = $line.Substring(0, 600) + '…' }
+              $line
+            })
+          if (-not $matches) {
+            $matches = @(Get-Content -LiteralPath $logPath -Tail 30 | ForEach-Object {
+              $line = $_.Trim()
+              if ($line.Length -gt 600) { $line = $line.Substring(0, 600) + '…' }
+              $line
+            })
+          }
+          $message = ($matches -join ' | ')
+          if ($message.Length -gt 12000) {
+            $message = $message.Substring($message.Length - 12000)
+          }
+          $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+          Write-Host "::error title=Native CI 诊断::$message"

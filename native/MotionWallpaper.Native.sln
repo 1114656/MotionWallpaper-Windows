@@ -1,0 +1,51 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "MotionWallpaper.App", "MotionWallpaper.App\MotionWallpaper.App.vcxproj", "{9BC9DBA9-F20B-4ED0-88B7-0ECAD5396694}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "MotionWallpaper.Agent", "MotionWallpaper.Agent\MotionWallpaper.Agent.vcxproj", "{C6CF6730-26A7-4AD0-AE39-F2946F2635C8}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "MotionWallpaper.Renderer", "MotionWallpaper.Renderer\MotionWallpaper.Renderer.vcxproj", "{6EC0AB25-6307-4F02-A77B-5D3E34622777}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "MotionWallpaper.Common", "MotionWallpaper.Common\MotionWallpaper.Common.vcxproj", "{8E8B0D7C-63C7-4D90-A08E-8F15AA760E39}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "MotionWallpaper.Core", "MotionWallpaper.Core\MotionWallpaper.Core.vcxproj", "{B154C177-6898-485C-82C8-9BE027E466F8}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "MotionWallpaper.Tests", "MotionWallpaper.Tests\MotionWallpaper.Tests.vcxproj", "{A7438CC9-BBBB-4E72-89A1-C15BC47B7627}"
+	ProjectSection(ProjectDependencies) = postProject
+		{6EC0AB25-6307-4F02-A77B-5D3E34622777} = {6EC0AB25-6307-4F02-A77B-5D3E34622777}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9BC9DBA9-F20B-4ED0-88B7-0ECAD5396694}.Debug|x64.ActiveCfg = Debug|x64
+		{9BC9DBA9-F20B-4ED0-88B7-0ECAD5396694}.Debug|x64.Build.0 = Debug|x64
+		{9BC9DBA9-F20B-4ED0-88B7-0ECAD5396694}.Release|x64.ActiveCfg = Release|x64
+		{9BC9DBA9-F20B-4ED0-88B7-0ECAD5396694}.Release|x64.Build.0 = Release|x64
+		{C6CF6730-26A7-4AD0-AE39-F2946F2635C8}.Debug|x64.ActiveCfg = Debug|x64
+		{C6CF6730-26A7-4AD0-AE39-F2946F2635C8}.Debug|x64.Build.0 = Debug|x64
+		{C6CF6730-26A7-4AD0-AE39-F2946F2635C8}.Release|x64.ActiveCfg = Release|x64
+		{C6CF6730-26A7-4AD0-AE39-F2946F2635C8}.Release|x64.Build.0 = Release|x64
+		{6EC0AB25-6307-4F02-A77B-5D3E34622777}.Debug|x64.ActiveCfg = Debug|x64
+		{6EC0AB25-6307-4F02-A77B-5D3E34622777}.Debug|x64.Build.0 = Debug|x64
+		{6EC0AB25-6307-4F02-A77B-5D3E34622777}.Release|x64.ActiveCfg = Release|x64
+		{6EC0AB25-6307-4F02-A77B-5D3E34622777}.Release|x64.Build.0 = Release|x64
+		{8E8B0D7C-63C7-4D90-A08E-8F15AA760E39}.Debug|x64.ActiveCfg = Debug|x64
+		{8E8B0D7C-63C7-4D90-A08E-8F15AA760E39}.Debug|x64.Build.0 = Debug|x64
+		{8E8B0D7C-63C7-4D90-A08E-8F15AA760E39}.Release|x64.ActiveCfg = Release|x64
+		{8E8B0D7C-63C7-4D90-A08E-8F15AA760E39}.Release|x64.Build.0 = Release|x64
+		{B154C177-6898-485C-82C8-9BE027E466F8}.Debug|x64.ActiveCfg = Debug|x64
+		{B154C177-6898-485C-82C8-9BE027E466F8}.Debug|x64.Build.0 = Debug|x64
+		{B154C177-6898-485C-82C8-9BE027E466F8}.Release|x64.ActiveCfg = Release|x64
+		{B154C177-6898-485C-82C8-9BE027E466F8}.Release|x64.Build.0 = Release|x64
+		{A7438CC9-BBBB-4E72-89A1-C15BC47B7627}.Debug|x64.ActiveCfg = Debug|x64
+		{A7438CC9-BBBB-4E72-89A1-C15BC47B7627}.Debug|x64.Build.0 = Debug|x64
+		{A7438CC9-BBBB-4E72-89A1-C15BC47B7627}.Release|x64.ActiveCfg = Release|x64
+		{A7438CC9-BBBB-4E72-89A1-C15BC47B7627}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal

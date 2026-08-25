@@ -1,0 +1,112 @@
+name: Alpha Release
+
+on:
+  push:
+    tags:
+      - 'v*-alpha.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: alpha-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-package-and-release:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify release tag
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath VERSION -Raw).Trim()
+          $expectedTag = "v$version"
+          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+            throw "发布标签 $env:GITHUB_REF_NAME 与 VERSION 中的 $expectedTag 不一致。"
+          }
+
+      - name: Build and test release payload
+        shell: pwsh
+        run: |
+          $logPath = Join-Path $env:RUNNER_TEMP 'alpha-release-build.log'
+          try {
+            & .\scripts\build-native.ps1 *>&1 | Tee-Object -FilePath $logPath
+            if ($LASTEXITCODE -ne 0) {
+              throw "发布构建脚本退出码：$LASTEXITCODE"
+            }
+          } catch {
+            $_ | Out-String | Tee-Object -FilePath $logPath -Append | Write-Host
+            throw
+          }
+
+      - name: Publish release failure diagnosis
+        if: failure()
+        shell: pwsh
+        run: |
+          $logPath = Join-Path $env:RUNNER_TEMP 'alpha-release-build.log'
+          if (-not (Test-Path -LiteralPath $logPath)) {
+            Write-Host '::error title=Alpha Release 失败::发布构建未生成诊断日志。'
+            exit 0
+          }
+          $pattern = '(?i)(MotionWallpaper native tests failed|Native (restore|build|tests) failed|fatal error|:\s*error\s+(MSB|C|LNK|NU)\d+|exception|FFmpeg|退出码|生成失败|测试失败|throw)'
+          $matches = @(Select-String -LiteralPath $logPath -Pattern $pattern |
+            Select-Object -Last 20 | ForEach-Object {
+              $line = $_.Line.Trim()
+              if ($line.Length -gt 600) { $line = $line.Substring(0, 600) + '…' }
+              $line
+            })
+          if (-not $matches) {
+            $matches = @(Get-Content -LiteralPath $logPath -Tail 30)
+          }
+          $message = ($matches -join ' | ')
+          if ($message.Length -gt 12000) {
+            $message = $message.Substring($message.Length - 12000)
+          }
+          $message = $message.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+          Write-Host "::error title=Alpha Release 诊断::$message"
+
+      - name: Package and validate alpha archive
+        shell: pwsh
+        run: .\scripts\package-alpha.ps1
+
+      - name: Create public prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content -LiteralPath VERSION -Raw).Trim()
+          $archive = "artifacts/MotionWallpaper-v$version-windows-x64.zip"
+          $checksum = "$archive.sha256"
+          $notes = @'
+          MotionWallpaper 的首个公开 Alpha 测试版本，借鉴 macOS 动态屏保体验，面向 Windows 原生开发。
+
+          ### 主要内容
+
+          - 支持动态壁纸、动态屏保和多显示器。
+          - 支持原画、自动平衡和低功耗性能档位。
+          - 允许删除源视频，同时保留封面、名称和已有性能副本。
+          - 优化壁纸切换、桌面宿主复用和播放状态更新，减少白屏与卡顿。
+
+          ### 下载与校验
+
+          下载 `MotionWallpaper-v{{VERSION}}-windows-x64.zip`，解压后运行 `MotionWallpaper.exe`。可使用随附的 `.sha256` 文件校验完整性。
+
+          ### Alpha 提醒
+
+          这是未签名的便携预发布版本，Windows SmartScreen 可能显示警告。请仅用于测试，升级或覆盖程序文件时请备份并保留 `Wallpapers` 和 `Config` 目录。遇到问题请通过仓库 Issue 反馈。
+          '@
+          $notes = $notes.Replace('{{VERSION}}', $version)
+          gh release create $env:GITHUB_REF_NAME $archive $checksum `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "MotionWallpaper v$version（Alpha 测试版）" `
+            --notes $notes `
+            --prerelease `
+            --verify-tag
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub Release 创建失败，退出码：$LASTEXITCODE"
+          }

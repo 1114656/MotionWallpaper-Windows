@@ -1,0 +1,122 @@
+#pragma once
+
+#include "MainWindow.g.h"
+#include "MediaLibrary.h"
+#include "SettingsStore.h"
+#include "VariantPageModel.h"
+#include "../MotionWallpaper.Common/DisplayTopology.h"
+
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <unordered_map>
+
+namespace winrt::MotionWallpaper::implementation
+{
+    struct MainWindow : MainWindowT<MainWindow>
+    {
+        MainWindow();
+
+        void Settings_Changed(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void Policy_Changed(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+        void SystemSettings_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void Variants_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void GroupPicker_SelectionChanged(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+        void GroupPicker_RightTapped(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Input::RightTappedRoutedEventArgs const&);
+        void GroupPicker_DragItemsStarting(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::DragItemsStartingEventArgs const&);
+        void GroupPicker_DragItemsCompleted(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::DragItemsCompletedEventArgs const&);
+        void Media_SelectionChanged(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+        void DisplayTargetPicker_Changed(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+        void ImportVideo_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void ImportImage_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void CancelImport_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void DeleteMedia_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void RenameMedia_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void MoveMedia_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void RandomInterval_Changed(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+        void Sort_Changed(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
+        void OpenNewGroup_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void CreateGroup_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void RenameGroup_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void MoveGroupUp_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void MoveGroupDown_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void DeleteGroup_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void OpenLibrary_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+        void CurrentWallpaper_Click(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
+
+    private:
+        enum class AppPage { Settings, Variants, WallpaperGroup };
+
+        std::filesystem::path root;
+        std::unique_ptr<motion::app::SettingsStore> settingsStore;
+        std::shared_ptr<motion::app::MediaLibrary> mediaLibrary;
+        motion::Settings settings;
+        std::string appliedGroupId;
+        std::string appliedMediaId;
+        std::string actualDecodePath;
+        std::string actualDecodeReason;
+        std::string browsingGroupId;
+        std::vector<motion::GroupMetadata> groups;
+        std::vector<motion::MediaMetadata> allMedia;
+        std::vector<motion::MediaMetadata> filteredMedia;
+        std::vector<motion::DisplayTarget> displays;
+        std::string selectedDisplayId;
+        Microsoft::UI::Dispatching::DispatcherQueueTimer settingsSaveTimer{ nullptr };
+        Microsoft::UI::Dispatching::DispatcherQueueTimer statusHideTimer{ nullptr };
+        Microsoft::UI::Dispatching::DispatcherQueueTimer settingsReloadTimer{ nullptr };
+        std::filesystem::file_time_type runtimeWriteTime{};
+        std::atomic_bool importing{};
+        std::shared_ptr<std::atomic_bool> importCancellation{ std::make_shared<std::atomic_bool>() };
+        std::atomic_bool coversRefreshing{};
+        std::atomic_bool closing{};
+        bool initializing{ true };
+        bool reorderingGroups{};
+        bool optimizationWorkVisible{};
+        AppPage currentPage{ AppPage::Settings };
+        std::unordered_map<std::string, uint8_t> variantSelections;
+        std::wstring variantViewFingerprint;
+        std::string draggedGroupId;
+
+        void SaveSettings();
+        bool TrySaveSettings() noexcept;
+        void ReloadExternalSelection();
+        void ApplySettingsToControls();
+        void LoadGroups();
+        void LoadMedia();
+        void RefreshMedia();
+        void UpdateMediaSelectionVisuals(int32_t selectedIndex);
+        void SyncMediaSelectionToApplied();
+        void UpdateMediaActionState();
+        void UpdatePerformanceModeAvailability();
+        void UpdateStatusSummary();
+        void LoadDisplayTargets();
+        std::pair<std::string, std::string> SelectedWallpaperForTarget() const;
+        void SelectWallpaperForTarget(std::string const& groupId, std::string const& mediaId, std::string const& displayId);
+        void RemoveMediaAssignments(std::string const& groupId, std::string const& mediaId);
+        void ShowSettingsPage();
+        void ShowVariantsPage();
+        void ShowWallpaperPage();
+        void Navigate(AppPage page);
+        void RefreshVariants();
+        void RequestVariant(motion::MediaMetadata const& media, std::string const& mode);
+        void SetVariantPaused(motion::MediaMetadata const& media, bool paused);
+        void CancelVariant(motion::MediaMetadata const& media);
+        void ConfirmDeleteVariantSelection(motion::MediaMetadata const& media, uint8_t selection);
+        winrt::fire_and_forget ImportFiles(std::string kind, std::wstring title, std::wstring pattern);
+        winrt::fire_and_forget RefreshMissingCovers(std::string groupId, std::vector<motion::MediaMetadata> media);
+        winrt::fire_and_forget MoveMedia(motion::MediaMetadata media, std::string targetGroupId);
+        winrt::fire_and_forget DeleteVariantProfiles(motion::MediaMetadata media, uint8_t selection);
+        winrt::fire_and_forget DeleteSource(motion::MediaMetadata media);
+        winrt::fire_and_forget DeleteMedia(motion::MediaMetadata media);
+        void StartController();
+        void ShowStatus(std::wstring const& message, bool error = false);
+        std::string ActiveGroupId();
+        void RenameActiveGroup();
+        void ReorderActiveGroup(int direction);
+    };
+}
+
+namespace winrt::MotionWallpaper::factory_implementation
+{
+    struct MainWindow : MainWindowT<MainWindow, implementation::MainWindow> {};
+}

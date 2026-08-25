@@ -1,0 +1,62 @@
+name: 问题报告
+description: 报告可以稳定复现的 MotionWallpaper 问题
+title: "[问题] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        请勿提交私人媒体、个人路径或安全敏感信息。安全漏洞请按照
+        SECURITY.md 中的方式私下报告。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 实际发生了什么？你期望的结果是什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 选择……
+        2. 等待……
+        3. 观察……
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境
+      description: >-
+        请填写 Windows 版本、CPU、GPU 和驱动、显示器分辨率/刷新率/DPI、
+        解码模式和壁纸性能档位。
+    validations:
+      required: true
+  - type: dropdown
+    id: displays
+    attributes:
+      label: 显示器设置
+      options:
+        - 单显示器
+        - 多显示器使用相同壁纸
+        - 多显示器使用不同壁纸
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: 补充信息
+      description: 只附加你有权分享的媒体、截图或日志片段。
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已在最新 main 提交上复现该问题。
+          required: true
+        - label: 我已搜索现有 Issue，没有发现相同问题。
+          required: true
+        - label: 本报告不包含安全漏洞信息。
+          required: true
