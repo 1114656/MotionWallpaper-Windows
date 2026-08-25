@@ -9,7 +9,9 @@ namespace motion::agent
     class VideoOptimizer
     {
     public:
-        explicit VideoOptimizer(std::filesystem::path logRoot);
+        VideoOptimizer(
+            std::filesystem::path dataRoot,
+            std::filesystem::path applicationRoot);
         ~VideoOptimizer();
         VideoOptimizer(VideoOptimizer const&) = delete;
         VideoOptimizer& operator=(VideoOptimizer const&) = delete;

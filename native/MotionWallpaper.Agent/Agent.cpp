@@ -987,7 +987,7 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ PWSTR, _In_ int)
         auto runtimePath = root / L"Config" / L"runtime.json";
         motion::Settings settings;
         RendererPool renderers(applicationRoot / L"motionwallpaper-renderer.exe");
-        motion::agent::VideoOptimizer videoOptimizer(root);
+        motion::agent::VideoOptimizer videoOptimizer(root, applicationRoot);
         RuntimeEvents runtimeEvents(applicationRoot / L"MotionWallpaper.exe");
         if (!runtimeEvents) return 1;
         std::string previousRandomGroup, previousSelectedGroup, previousSelectedMedia, previousPerformanceMode, randomId;

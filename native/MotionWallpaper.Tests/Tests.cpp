@@ -94,6 +94,9 @@ namespace
         auto applicationRoot = root / L"application";
         auto localRoot = root / L"local";
         fs::create_directories(applicationRoot);
+        require(motion::ffmpeg_executable_path(applicationRoot) ==
+            applicationRoot / L"Tools" / L"ffmpeg" / L"ffmpeg.exe",
+            "installed FFmpeg path was detached from the application directory");
         require(motion::select_application_data_directory(applicationRoot, localRoot) == localRoot / L"MotionWallpaper",
             "fresh installed app did not use LocalAppData");
 

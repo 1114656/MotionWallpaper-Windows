@@ -275,7 +275,7 @@ namespace motion::agent
         if (selectedBackend) selectedBackend->clear();
         std::error_code fileError;
         if (!fs::is_regular_file(ffmpeg, fileError)) {
-            error = L"FFmpeg 优化后端未安装";
+            error = L"FFmpeg 优化后端未安装: " + ffmpeg.wstring();
             return VideoTranscodeResult::unsupported;
         }
         if (!width || !height || !targetFps) {

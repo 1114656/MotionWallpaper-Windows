@@ -46,7 +46,8 @@ $required = @(
     'motionwallpaper-agent.exe',
     'motionwallpaper-renderer.exe',
     'LICENSE.txt',
-    'THIRD_PARTY_NOTICES.md'
+    'THIRD_PARTY_NOTICES.md',
+    'Tools\ffmpeg\ffmpeg.exe'
 )
 foreach ($name in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $build $name) -PathType Leaf)) {

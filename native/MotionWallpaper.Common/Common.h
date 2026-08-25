@@ -108,6 +108,7 @@ namespace motion
     std::filesystem::path select_application_data_directory(
         std::filesystem::path const& applicationRoot,
         std::filesystem::path const& localAppDataRoot);
+    std::filesystem::path ffmpeg_executable_path(std::filesystem::path const& applicationRoot);
     std::wstring utf8_to_wide(std::string const& value);
     std::string wide_to_utf8(std::wstring_view value);
     std::string new_id();

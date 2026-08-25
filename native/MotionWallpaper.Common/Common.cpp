@@ -246,6 +246,11 @@ namespace motion
         return select_application_data_directory(applicationRoot, fs::path(value));
     }
 
+    fs::path ffmpeg_executable_path(fs::path const& applicationRoot)
+    {
+        return applicationRoot / L"Tools" / L"ffmpeg" / L"ffmpeg.exe";
+    }
+
     std::wstring utf8_to_wide(std::string const& value)
     {
         if (value.empty()) return {};

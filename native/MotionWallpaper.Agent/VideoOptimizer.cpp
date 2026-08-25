@@ -275,14 +275,16 @@ namespace motion::agent
             }
         };
 
-        explicit Impl(fs::path root) : root_(std::move(root))
+        Impl(fs::path dataRoot, fs::path applicationRoot)
+            : dataRoot_(std::move(dataRoot)),
+              ffmpeg_(motion::ffmpeg_executable_path(applicationRoot))
         {
-            normalize_variant_profiles(root_);
+            normalize_variant_profiles(dataRoot_);
             mediaFoundationStarted_ = SUCCEEDED(MFStartup(MF_VERSION, MFSTARTUP_FULL));
             if (mediaFoundationStarted_) {
                 worker_ = std::jthread([this](std::stop_token stop) { Run(stop); });
             } else {
-                append_log(root_, L"无法初始化媒体优化器，继续使用原视频。");
+                append_log(dataRoot_, L"无法初始化媒体优化器，继续使用原视频。");
             }
         }
 
@@ -341,12 +343,12 @@ namespace motion::agent
             }
             if (current_variant(source, destination)) {
                 AdoptVariant(source, mode, destination);
-                append_log(root_, L"使用壁纸性能缓存: " + destination.filename().wstring());
+                append_log(dataRoot_, L"使用壁纸性能缓存: " + destination.filename().wstring());
                 return destination;
             }
             if (reuse_equivalent_variant(source, destination, mode)) {
                 AdoptVariant(source, mode, destination);
-                append_log(root_, L"复用相同规格的壁纸性能副本: " + destination.filename().wstring());
+                append_log(dataRoot_, L"复用相同规格的壁纸性能副本: " + destination.filename().wstring());
                 return destination;
             }
             {
@@ -530,7 +532,7 @@ namespace motion::agent
                     motion::fail_variant_generation(request.source.parent_path(), request.mode);
                 }
                 if (!paused && !obsolete && !cancelled && !suppressed && !superseded) {
-                    append_log(root_, accepted
+                    append_log(dataRoot_, accepted
                         ? L"已生成壁纸优化副本: " + request.destination.filename().wstring()
                         : L"无法生成壁纸优化副本，继续使用原文件: " + request.source.filename().wstring());
                 }
@@ -552,16 +554,16 @@ namespace motion::agent
                 }
                 protectedFiles.insert(request.destination);
                 protectedFiles.insert(temporary);
-                prune_variant_cache(root_, protectedFiles);
+                prune_variant_cache(dataRoot_, protectedFiles);
                 if (!has_transcode_space(directory, request.source)) {
-                    append_log(root_, L"磁盘空间不足，跳过壁纸性能缓存生成。");
+                    append_log(dataRoot_, L"磁盘空间不足，跳过壁纸性能缓存生成。");
                     return VideoTranscodeResult::failed;
                 }
                 auto targetFps = request.targetFps;
                 std::wstring error;
                 std::wstring selectedBackend;
                 auto result = transcode_video(
-                    root_ / L"Tools" / L"ffmpeg" / L"ffmpeg.exe",
+                    ffmpeg_,
                     request.source, temporary, request.width, request.height, targetFps,
                     [&] {
                         if (motion::variant_generation_paused(request.source.parent_path())) {
@@ -580,7 +582,7 @@ namespace motion::agent
                     return result;
                 }
                 if (result != VideoTranscodeResult::succeeded) {
-                    append_log(root_, L"优化 " + std::to_wstring(targetFps) + L" FPS 不可用: " + error);
+                    append_log(dataRoot_, L"优化 " + std::to_wstring(targetFps) + L" FPS 不可用: " + error);
                     fs::remove(temporary, ignored);
                     return result;
                 }
@@ -598,7 +600,7 @@ namespace motion::agent
                 bool matchingDimensions = video_variant_dimensions_match(
                     actual.width, actual.height, request.width, request.height);
                 if (!matchingDimensions || !matchingRate) {
-                    append_log(root_, L"优化副本校验失败（实际 " +
+                    append_log(dataRoot_, L"优化副本校验失败（实际 " +
                         std::to_wstring(actual.width) + L"x" + std::to_wstring(actual.height) + L", " +
                         std::to_wstring(actual.numerator) + L"/" + std::to_wstring(actual.denominator) +
                         L" FPS），已自动删除。");
@@ -607,7 +609,7 @@ namespace motion::agent
                 }
                 fs::remove(request.destination, ignored);
                 fs::rename(temporary, request.destination);
-                append_log(root_, L"优化副本实际帧率: " + std::to_wstring(targetFps) + L" FPS；编码后端: " +
+                append_log(dataRoot_, L"优化副本实际帧率: " + std::to_wstring(targetFps) + L" FPS；编码后端: " +
                     (selectedBackend.empty() ? std::wstring(L"未知") : selectedBackend) + L"。");
                 return current_variant(request.source, request.destination)
                     ? VideoTranscodeResult::succeeded : VideoTranscodeResult::failed;
@@ -617,7 +619,8 @@ namespace motion::agent
             }
         }
 
-        fs::path root_;
+        fs::path dataRoot_;
+        fs::path ffmpeg_;
         std::mutex mutex_;
         std::condition_variable_any condition_;
         std::deque<Request> pending_;
@@ -634,7 +637,8 @@ namespace motion::agent
         bool mediaFoundationStarted_{};
     };
 
-    VideoOptimizer::VideoOptimizer(fs::path logRoot) : impl_(std::make_unique<Impl>(std::move(logRoot))) {}
+    VideoOptimizer::VideoOptimizer(fs::path dataRoot, fs::path applicationRoot)
+        : impl_(std::make_unique<Impl>(std::move(dataRoot), std::move(applicationRoot))) {}
     VideoOptimizer::~VideoOptimizer() = default;
     fs::path VideoOptimizer::Resolve(fs::path const& source, std::string const& performanceMode,
         uint32_t targetWidth, uint32_t targetHeight, uint32_t targetRefreshRate)
