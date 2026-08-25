@@ -222,6 +222,30 @@ namespace motion
         return fs::path(value).parent_path();
     }
 
+    fs::path select_application_data_directory(fs::path const& applicationRoot, fs::path const& localAppDataRoot)
+    {
+        std::error_code error;
+        bool portable = fs::is_regular_file(applicationRoot / L"portable.mode", error);
+        error.clear();
+        bool legacyConfig = fs::is_directory(applicationRoot / L"Config", error);
+        error.clear();
+        bool legacyLibrary = fs::is_directory(applicationRoot / L"Wallpapers", error);
+        if (portable || legacyConfig || legacyLibrary || localAppDataRoot.empty()) return applicationRoot;
+        return localAppDataRoot / L"MotionWallpaper";
+    }
+
+    fs::path application_data_directory()
+    {
+        auto applicationRoot = executable_directory();
+        DWORD required = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
+        if (!required) return select_application_data_directory(applicationRoot, {});
+        std::wstring value(required, L'\0');
+        DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", value.data(), required);
+        if (!length || length >= required) return select_application_data_directory(applicationRoot, {});
+        value.resize(length);
+        return select_application_data_directory(applicationRoot, fs::path(value));
+    }
+
     std::wstring utf8_to_wide(std::string const& value)
     {
         if (value.empty()) return {};

@@ -1,8 +1,8 @@
 # 发布清单
 
-MotionWallpaper 目前处于 Alpha 阶段。WinUI 依赖固定在稳定的 Windows App SDK 1.8 维护版本。公开 Alpha 便携包必须经过 CI、打包内容和校验和验证，并明确标注为未签名预发布软件。
+MotionWallpaper 目前处于 Alpha 阶段。WinUI 依赖固定在稳定的 Windows App SDK 1.8 维护版本。公开 Alpha 安装器和便携包必须经过 CI、内容、安装/卸载和校验和验证，并明确标注为未签名预发布软件。
 
-当前候选版本从仓库根目录的 `VERSION` 读取。便携包由 `scripts\package-alpha.ps1` 生成；版本标签推送成功后，`Alpha Release` 工作流会重新构建、测试、打包并创建公开预发布版。
+当前候选版本从仓库根目录的 `VERSION` 读取。单 EXE 安装器由 `scripts\build-installer.ps1` 生成，便携包由 `scripts\package-alpha.ps1` 生成；版本标签推送成功后，`Alpha Release` 工作流会重新构建、测试、打包并创建公开预发布版。
 
 ## 源码预发布
 
@@ -14,13 +14,15 @@ MotionWallpaper 目前处于 Alpha 阶段。WinUI 依赖固定在稳定的 Windo
 6. 推送提交并等待 Native CI 通过。
 7. 创建类似 `v0.1.0-alpha.1` 的预发布标签；标签必须与 `VERSION` 完全一致。
 
-## 公开 Alpha 便携候选版
+## 公开 Alpha 候选版
 
 1. 完整执行 `scripts\build-native.ps1` 发布流程。
-2. 执行 `scripts\package-alpha.ps1`，并要求压缩包验证通过。
-3. 确认压缩包不包含 `Wallpapers`、`Config`、日志、调试符号和本机测试证据。
-4. 上传 ZIP 和匹配的 `.sha256` 文件，并将 GitHub Release 标记为 Pre-release。
-5. 明确标注为未签名 Alpha 软件，提醒用户注意 SmartScreen、备份数据并保留 `Wallpapers` 与 `Config`。
+2. 执行 `scripts\package-alpha.ps1` 和 `scripts\build-installer.ps1 -SkipBuild`，要求两种分发物验证通过。
+3. 确认两种负载只包含简体中文和英文资源，且不包含 `Wallpapers`、`Config`、日志、调试符号和本机测试证据。
+4. 静默安装到临时自定义目录，验证程序集中位于 `App`、用户数据位于 `%LOCALAPPDATA%\MotionWallpaper`，随后测试升级和卸载。
+5. 确认卸载不会删除用户壁纸和设置，也不会留下开机启动注册表值。
+6. 上传安装 EXE、便携 ZIP 及匹配的 `.sha256` 文件，并将 GitHub Release 标记为 Pre-release。
+7. 明确标注为未签名 Alpha 软件，提醒用户注意 SmartScreen；安装版数据由卸载程序默认保留，便携版升级时需保留 `Wallpapers` 与 `Config`。
 
 ## 未来稳定二进制版本
 

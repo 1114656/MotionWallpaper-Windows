@@ -76,6 +76,7 @@ try {
             'MotionWallpaper.exe',
             'motionwallpaper-agent.exe',
             'motionwallpaper-renderer.exe',
+            'portable.mode',
             'LICENSE.txt',
             'THIRD_PARTY_NOTICES.md',
             'Tools/ffmpeg/ffmpeg.exe',
@@ -96,6 +97,15 @@ try {
         })
         if ($forbidden.Count -gt 0) {
             throw "Package contains forbidden entries: $($forbidden -join ', ')"
+        }
+
+        $supportedResourceLanguages = @('zh-CN', 'en-us')
+        $unsupportedLanguageResources = @($entries | Where-Object { $_ -match '(?i)\.mui$' } | ForEach-Object {
+            $relative = $_.Substring($prefix.Length)
+            ($relative -split '/', 2)[0]
+        } | Where-Object { $_ -notin $supportedResourceLanguages } | Select-Object -Unique)
+        if ($unsupportedLanguageResources.Count -gt 0) {
+            throw "Package contains unsupported language resources: $($unsupportedLanguageResources -join ', ')"
         }
     } finally {
         $archive.Dispose()

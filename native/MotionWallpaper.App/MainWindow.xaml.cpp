@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "MainWindow.xaml.h"
+#include "resource.h"
 #include "VariantTaskView.h"
 
 #if __has_include("MainWindow.g.cpp")
@@ -222,6 +223,15 @@ namespace winrt::MotionWallpaper::implementation
         HWND window{};
         auto nativeWindow = this->try_as<::IWindowNative>();
         check_hresult(nativeWindow->get_WindowHandle(&window));
+        auto instance = GetModuleHandleW(nullptr);
+        auto largeIcon = static_cast<HICON>(LoadImageW(
+            instance, MAKEINTRESOURCEW(IDI_MOTIONWALLPAPER), IMAGE_ICON,
+            GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_SHARED));
+        auto smallIcon = static_cast<HICON>(LoadImageW(
+            instance, MAKEINTRESOURCEW(IDI_MOTIONWALLPAPER), IMAGE_ICON,
+            GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_SHARED));
+        if (largeIcon) SendMessageW(window, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(largeIcon));
+        if (smallIcon) SendMessageW(window, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(smallIcon));
         UINT dpi = GetDpiForWindow(window);
         int width = MulDiv(1440, static_cast<int>(dpi), 96);
         int height = MulDiv(1024, static_cast<int>(dpi), 96);
@@ -258,8 +268,9 @@ namespace winrt::MotionWallpaper::implementation
             if (!initializing && settingsStore) TrySaveSettings();
         });
 
-        root = motion::executable_directory();
-        settingsStore = std::make_unique<motion::app::SettingsStore>(root);
+        applicationRoot = motion::executable_directory();
+        root = motion::application_data_directory();
+        settingsStore = std::make_unique<motion::app::SettingsStore>(root, applicationRoot);
         mediaLibrary = std::make_shared<motion::app::MediaLibrary>(root);
         mediaLibrary->EnsureDirectories();
         try { settings = settingsStore->Load(); }
@@ -300,7 +311,7 @@ namespace winrt::MotionWallpaper::implementation
             SaveSettings();
             return true;
         } catch (...) {
-            ShowStatus(L"无法保存设置，请确认程序目录可写且配置文件未被占用。", true);
+            ShowStatus(L"无法保存设置，请确认用户数据目录可写且配置文件未被占用。", true);
             return false;
         }
     }
@@ -1834,12 +1845,13 @@ namespace winrt::MotionWallpaper::implementation
 
     void MainWindow::StartController()
     {
-        auto executable = root / L"motionwallpaper-agent.exe";
+        auto executable = applicationRoot / L"motionwallpaper-agent.exe";
         if (!fs::exists(executable)) return;
         std::wstring command = L"\"" + executable.wstring() + L"\"";
         STARTUPINFOW startup{ sizeof(startup) };
         PROCESS_INFORMATION process{};
-        if (CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, root.c_str(), &startup, &process)) {
+        if (CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+            nullptr, applicationRoot.c_str(), &startup, &process)) {
             motion::unique_handle thread(process.hThread);
             motion::unique_handle handle(process.hProcess);
         }

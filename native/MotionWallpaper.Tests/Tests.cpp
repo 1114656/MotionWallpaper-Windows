@@ -89,6 +89,29 @@ namespace
         require(cleared->displayAssignments.empty(), "display assignment survived clearing");
     }
 
+    void application_data_location_preserves_portable_and_legacy_libraries(fs::path const& root)
+    {
+        auto applicationRoot = root / L"application";
+        auto localRoot = root / L"local";
+        fs::create_directories(applicationRoot);
+        require(motion::select_application_data_directory(applicationRoot, localRoot) == localRoot / L"MotionWallpaper",
+            "fresh installed app did not use LocalAppData");
+
+        std::ofstream(applicationRoot / L"portable.mode") << "portable\n";
+        require(motion::select_application_data_directory(applicationRoot, localRoot) == applicationRoot,
+            "portable marker did not keep data beside the executable");
+        fs::remove(applicationRoot / L"portable.mode");
+
+        fs::create_directories(applicationRoot / L"Config");
+        require(motion::select_application_data_directory(applicationRoot, localRoot) == applicationRoot,
+            "legacy configuration was detached from its executable");
+        fs::remove_all(applicationRoot / L"Config");
+
+        fs::create_directories(applicationRoot / L"Wallpapers");
+        require(motion::select_application_data_directory(applicationRoot, localRoot) == applicationRoot,
+            "legacy wallpaper library was detached from its executable");
+    }
+
     void legacy_settings_are_migrated(fs::path const& root)
     {
         auto path = root / L"legacy-settings.json";
@@ -1177,6 +1200,7 @@ int wmain(int argc, wchar_t** argv)
 #define RUN_TEST(expression) do { currentTest = #expression; expression; } while (false)
     try {
         fs::create_directories(root);
+        RUN_TEST(application_data_location_preserves_portable_and_legacy_libraries(root));
         RUN_TEST(settings_round_trip_clears_empty_values(root));
         RUN_TEST(legacy_settings_are_migrated(root));
         RUN_TEST(coupled_lock_and_display_off_settings_are_migrated(root));

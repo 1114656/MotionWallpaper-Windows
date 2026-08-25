@@ -123,6 +123,23 @@ Get-ChildItem -LiteralPath $outputDirectory -Recurse -Directory |
         }
     }
 
+# Windows App SDK self-contained output includes satellite resources for every
+# translated WinUI language. MotionWallpaper currently supports Simplified
+# Chinese with English fallback, so keep only those two resource directories.
+$supportedResourceLanguages = @('zh-CN', 'en-us')
+Get-ChildItem -LiteralPath $outputDirectory -Directory | ForEach-Object {
+    $resourceFiles = @(Get-ChildItem -LiteralPath $_.FullName -Recurse -File)
+    $isSatelliteLanguageDirectory = $resourceFiles.Count -gt 0 -and
+        @($resourceFiles | Where-Object { $_.Extension -ine '.mui' }).Count -eq 0
+    if ($isSatelliteLanguageDirectory -and $_.Name -notin $supportedResourceLanguages) {
+        Remove-Item -LiteralPath $_.FullName -Recurse -Force
+    }
+}
+
+# The ZIP remains genuinely portable. The installer deliberately excludes this
+# marker so installed builds store mutable data under LocalAppData instead.
+[IO.File]::WriteAllText((Join-Path $outputDirectory 'portable.mode'), "portable`r`n", [Text.UTF8Encoding]::new($false))
+
 # Keep the optional optimization backend inside the installed application.
 # Downloads and extraction stay in the workspace Codex cache, not in the repo.
 & (Join-Path $PSScriptRoot 'prepare-ffmpeg.ps1') -Destination (Join-Path $outputDirectory 'Tools\ffmpeg')

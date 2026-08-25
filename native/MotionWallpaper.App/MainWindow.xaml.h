@@ -48,6 +48,7 @@ namespace winrt::MotionWallpaper::implementation
         enum class AppPage { Settings, Variants, WallpaperGroup };
 
         std::filesystem::path root;
+        std::filesystem::path applicationRoot;
         std::unique_ptr<motion::app::SettingsStore> settingsStore;
         std::shared_ptr<motion::app::MediaLibrary> mediaLibrary;
         motion::Settings settings;

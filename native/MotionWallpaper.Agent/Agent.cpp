@@ -975,15 +975,16 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ PWSTR, _In_ int)
     motion::unique_handle settingsEvent(CreateEventW(nullptr, FALSE, FALSE, motion::settings_event_name));
     if (!settingsEvent) return 1;
     enable_eco_qos();
-    auto root = motion::executable_directory();
+    auto applicationRoot = motion::executable_directory();
+    auto root = motion::application_data_directory();
 
     try {
         auto configPath = root / L"Config" / L"settings.json";
         auto runtimePath = root / L"Config" / L"runtime.json";
         motion::Settings settings;
-        RendererPool renderers(root / L"motionwallpaper-renderer.exe");
+        RendererPool renderers(applicationRoot / L"motionwallpaper-renderer.exe");
         motion::agent::VideoOptimizer videoOptimizer(root);
-        RuntimeEvents runtimeEvents(root / L"MotionWallpaper.exe");
+        RuntimeEvents runtimeEvents(applicationRoot / L"MotionWallpaper.exe");
         if (!runtimeEvents) return 1;
         std::string previousRandomGroup, previousSelectedGroup, previousSelectedMedia, previousPerformanceMode, randomId;
         int previousRandomInterval = -1;

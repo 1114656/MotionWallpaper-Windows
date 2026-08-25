@@ -51,6 +51,7 @@
     <ClInclude Include="App.xaml.h"><DependentUpon>App.xaml</DependentUpon></ClInclude>
     <ClInclude Include="MainWindow.xaml.h"><DependentUpon>MainWindow.xaml</DependentUpon></ClInclude>
     <ClInclude Include="MediaLibrary.h" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="SettingsStore.h" />
     <ClInclude Include="ThumbnailGenerator.h" />
     <ClInclude Include="VariantPageModel.h" />
@@ -61,6 +62,9 @@
     <Content Include="Assets\motion-logo.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="MotionWallpaper.rc" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp"><PrecompiledHeader>Create</PrecompiledHeader></ClCompile>
