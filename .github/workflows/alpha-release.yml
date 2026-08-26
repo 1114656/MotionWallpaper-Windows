@@ -99,9 +99,12 @@ jobs:
           - 支持动态壁纸、动态屏保和多显示器。
           - 支持原画、自动平衡和低功耗性能档位。
           - 允许删除源视频，同时保留封面、名称和已有性能副本。
-          - 优化壁纸切换、桌面宿主复用和播放状态更新，减少白屏与卡顿。
+          - 修复 NVIDIA 与物理 GPU 硬件解码判断，旧显卡可使用 CPU 解码与物理 GPU 合成。
+          - 无可用 GPU 时自动生成 H.264 CPU 友好副本，并按实际负载动态调节软件渲染帧率。
+          - 优化壁纸切换、桌面宿主复用和播放状态更新，降低 WARP 路径的内存与 CPU 占用。
           - 提供可选择安装位置的中英文单 EXE 安装器，并统一应用、任务栏和安装器图标。
-          - 安装版将壁纸和设置放在用户数据目录，卸载默认保留；程序目录只保留运行文件。
+          - 安装版与便携版统一把配置、日志、分组和壁纸放在程序目录，升级时安全迁移旧数据。
+          - 卸载安装版时会完整删除程序和全部用户数据，不再在 C 盘保留媒体库。
           - 精简 Windows App SDK 卫星资源，只保留简体中文和英文。
 
           ### 下载与校验
@@ -110,7 +113,7 @@ jobs:
 
           ### Alpha 提醒
 
-          这是未签名的预发布版本，Windows SmartScreen 可能显示警告。请仅用于测试。安装版卸载时默认保留 `%LOCALAPPDATA%\MotionWallpaper` 中的媒体和设置；便携版升级时请保留程序旁的 `Wallpapers` 和 `Config`。遇到问题请通过仓库 Issue 反馈。
+          这是未签名的预发布版本，Windows SmartScreen 可能显示警告。请仅用于测试。安装版卸载会同时删除壁纸、分组、配置和日志，请提前备份需要保留的内容；便携版升级时请保留程序旁的 `Wallpapers` 和 `Config`。遇到问题请通过仓库 Issue 反馈。
           '@
           $notes = $notes.Replace('{{VERSION}}', $version)
           gh release create $env:GITHUB_REF_NAME $installer $installerChecksum $archive $checksum `
