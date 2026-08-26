@@ -29,7 +29,7 @@ function Copy-FfmpegPackage {
 
     $publishedFfmpeg = Join-Path $Destination 'ffmpeg.exe'
     $encoders = (& $publishedFfmpeg -hide_banner -encoders 2>&1 | Out-String)
-    foreach ($requiredEncoder in @('hevc_nvenc', 'hevc_qsv', 'hevc_amf', 'libkvazaar')) {
+    foreach ($requiredEncoder in @('hevc_nvenc', 'hevc_qsv', 'hevc_amf', 'libkvazaar', 'libopenh264')) {
         if ($encoders -notmatch [Regex]::Escape($requiredEncoder)) {
             throw "The verified FFmpeg package does not provide required encoder '$requiredEncoder'."
         }

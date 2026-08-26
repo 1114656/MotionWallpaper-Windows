@@ -17,7 +17,8 @@ namespace motion::agent
         nvidiaNvenc,
         intelQsv,
         amdAmf,
-        softwareKvazaar
+        softwareKvazaar,
+        softwareOpenH264
     };
 
     struct VideoTranscodeAdapter
@@ -32,7 +33,8 @@ namespace motion::agent
         uint32_t height,
         uint32_t targetFps,
         bool adapterProbeSucceeded = true,
-        bool softwareFallbackAllowed = true);
+        bool softwareFallbackAllowed = true,
+        bool softwarePlaybackTarget = false);
 
     [[nodiscard]] std::wstring video_transcode_backend_name(VideoTranscodeBackend backend);
 
@@ -46,5 +48,6 @@ namespace motion::agent
         std::function<VideoTranscodeControl()> const& control,
         std::wstring& error,
         std::wstring* selectedBackend = nullptr,
-        bool softwareFallbackAllowed = true);
+        bool softwareFallbackAllowed = true,
+        bool softwarePlaybackTarget = false);
 }

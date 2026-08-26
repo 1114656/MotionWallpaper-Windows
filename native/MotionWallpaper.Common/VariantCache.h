@@ -58,6 +58,35 @@ namespace motion
         return best ? best->fileName : std::wstring{};
     }
 
+    // CPU-smooth copies are an internal compatibility cache rather than a
+    // user-selected quality tier. Keep them out of the variants UI, but allow
+    // a source-less wallpaper to remain playable on a WARP-only system.
+    [[nodiscard]] inline std::wstring select_cpu_smooth_variant_file(
+        std::filesystem::path const& mediaDirectory) noexcept
+    {
+        try {
+            std::wstring best;
+            std::filesystem::file_time_type bestTime{};
+            std::error_code error;
+            for (std::filesystem::directory_iterator entries(mediaDirectory / L"Variants", error), end;
+                !error && entries != end; entries.increment(error)) {
+                std::error_code itemError;
+                if (!entries->is_regular_file(itemError) || itemError || !entries->file_size(itemError) || itemError) continue;
+                auto name = entries->path().filename().wstring();
+                if (!name.starts_with(L"cpu-smooth-") || !name.ends_with(L"-v5.mp4")) continue;
+                auto modified = entries->last_write_time(itemError);
+                if (itemError) continue;
+                if (best.empty() || modified > bestTime) {
+                    best = std::move(name);
+                    bestTime = modified;
+                }
+            }
+            return best;
+        } catch (...) {
+            return {};
+        }
+    }
+
     inline std::filesystem::path variant_request_path(std::filesystem::path const& mediaDirectory)
     {
         return mediaDirectory / L".optimization-request";
@@ -97,10 +126,11 @@ namespace motion
     inline bool retain_variant_profile(std::filesystem::path const& mediaDirectory,
         std::string const& mode, std::wstring const& keepFileName) noexcept
     {
-        if ((mode != "balanced" && mode != "power-saver") || keepFileName.empty()) return false;
+        if ((mode != "balanced" && mode != "power-saver" && mode != "cpu-smooth") || keepFileName.empty()) return false;
         try {
             auto variants = mediaDirectory / L"Variants";
-            auto prefix = mode == "balanced" ? L"balanced-" : L"power-saver-";
+            auto prefix = mode == "balanced" ? L"balanced-" :
+                mode == "power-saver" ? L"power-saver-" : L"cpu-smooth-";
             if (!keepFileName.starts_with(prefix) || !keepFileName.ends_with(L".mp4") ||
                 keepFileName.ends_with(L".part.mp4")) return false;
             std::error_code error;

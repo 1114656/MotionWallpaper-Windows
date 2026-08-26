@@ -136,8 +136,8 @@ Get-ChildItem -LiteralPath $outputDirectory -Directory | ForEach-Object {
     }
 }
 
-# The ZIP remains genuinely portable. The installer deliberately excludes this
-# marker so installed builds store mutable data under LocalAppData instead.
+# Both the ZIP and installer use one-directory storage. The installer migrates
+# legacy LocalAppData content and removes all mutable data during uninstall.
 [IO.File]::WriteAllText((Join-Path $outputDirectory 'portable.mode'), "portable`r`n", [Text.UTF8Encoding]::new($false))
 
 # Keep the optional optimization backend inside the installed application.

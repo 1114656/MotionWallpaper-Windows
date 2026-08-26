@@ -37,6 +37,8 @@ namespace
         uint32_t width{};
         uint32_t height{};
         bool softwareFallbackAllowed{ true };
+        bool softwarePlaybackConversionAllowed{ true };
+        bool softwarePlaybackFriendly{};
     };
 
     SourceRate source_rate(fs::path const& source)
@@ -65,6 +67,13 @@ namespace
                 : motion::agent::VideoSourceCodec::Unknown;
         result.softwareFallbackAllowed = motion::agent::video_software_fallback_allowed(
             codec, hasProfile, profile, hdrTransfer, bt2020Primaries);
+        // The internal CPU playback copy may reduce SDR 10-bit material to
+        // 8-bit because the source remains untouched. HDR/BT.2020 requires an
+        // explicit tone-mapping policy and must never be silently flattened.
+        result.softwarePlaybackConversionAllowed = motion::agent::video_cpu_conversion_allowed(
+            hdrTransfer, bt2020Primaries);
+        result.softwarePlaybackFriendly = codec == motion::agent::VideoSourceCodec::H264 &&
+            result.softwareFallbackAllowed;
         return result;
     }
 
@@ -81,6 +90,7 @@ namespace
     bool reuse_equivalent_variant(fs::path const& source, fs::path const& destination,
         std::string const& mode)
     {
+        if (mode == "cpu-smooth") return false;
         auto name = destination.filename().wstring();
         auto prefix = mode == "power-saver" ? std::wstring(L"power-saver-") : std::wstring(L"balanced-");
         auto alternatePrefix = mode == "power-saver" ? std::wstring(L"balanced-") : std::wstring(L"power-saver-");
@@ -170,7 +180,8 @@ namespace
 
     std::wstring variant_prefix(std::string const& mode)
     {
-        return mode == "balanced" ? L"balanced-" : L"power-saver-";
+        return mode == "balanced" ? L"balanced-" :
+            mode == "power-saver" ? L"power-saver-" : L"cpu-smooth-";
     }
 
     void coalesce_equivalent_profiles(fs::path const& variants) noexcept
@@ -227,7 +238,8 @@ namespace
             // No transcoder exists while the optimizer is being constructed.
             // Any partial at this point belongs to a crashed or cancelled run.
             motion::remove_variant_partials(variants.parent_path());
-            for (auto const& mode : { std::string("balanced"), std::string("power-saver") }) {
+            for (auto const& mode : { std::string("balanced"), std::string("power-saver"),
+                std::string("cpu-smooth") }) {
                 std::optional<Candidate> keep;
                 std::error_code entriesError;
                 for (fs::directory_iterator entries(variants, entriesError), entriesEnd;
@@ -237,7 +249,8 @@ namespace
                     auto name = entries->path().filename().wstring();
                     if (!name.starts_with(variant_prefix(mode)) || name.ends_with(L".part.mp4") ||
                         entries->path().extension() != L".mp4") continue;
-                    Candidate candidate{ entries->path(), name.ends_with(L"-v4.mp4"),
+                    Candidate candidate{ entries->path(), mode == "cpu-smooth"
+                        ? name.ends_with(L"-v5.mp4") : name.ends_with(L"-v4.mp4"),
                         entries->last_write_time(itemError) };
                     if (itemError) continue;
                     if (!keep || (candidate.currentPolicy && !keep->currentPolicy) ||
@@ -268,6 +281,7 @@ namespace motion::agent
             uint64_t generation{};
             bool explicitRequest{};
             bool softwareFallbackAllowed{ true };
+            bool softwarePlaybackTarget{};
 
             [[nodiscard]] std::wstring Key() const
             {
@@ -297,9 +311,11 @@ namespace motion::agent
             if (mediaFoundationStarted_) MFShutdown();
         }
 
-        fs::path Resolve(fs::path const& source, std::string const& mode,
-            uint32_t targetWidth, uint32_t targetHeight, uint32_t targetRefreshRate)
+        fs::path Resolve(fs::path const& source, std::string const& requestedMode,
+            uint32_t targetWidth, uint32_t targetHeight, uint32_t targetRefreshRate,
+            bool softwarePlaybackTarget)
         {
+            auto mode = softwarePlaybackTarget ? std::string("cpu-smooth") : requestedMode;
             if (source.empty() || mode == "original" || !mediaFoundationStarted_) return source;
             if (fs::is_regular_file(motion::variant_cancelled_path(source.parent_path()))) return source;
             if (motion::variant_generation_paused(source.parent_path())) return source;
@@ -316,13 +332,16 @@ namespace motion::agent
                 rates_[source.wstring()] = rate;
             }
 
-            auto dimensions = video_variant_dimensions(
-                rate.width, rate.height, targetWidth, targetHeight);
+            auto dimensions = softwarePlaybackTarget
+                ? video_cpu_variant_dimensions(rate.width, rate.height, targetWidth, targetHeight)
+                : video_variant_dimensions(rate.width, rate.height, targetWidth, targetHeight);
             auto decision = video_variant_decision(
                 mode, dimensions.first, dimensions.second,
                 rate.numerator, rate.denominator, targetRefreshRate);
+            bool codecNeedsVariant = softwarePlaybackTarget && !rate.softwarePlaybackFriendly;
             if (!video_needs_variant(rate.numerator, rate.denominator, decision.targetFps,
-                rate.width, rate.height, dimensions.first, dimensions.second)) return source;
+                rate.width, rate.height, dimensions.first, dimensions.second) && !codecNeedsVariant) return source;
+            if (softwarePlaybackTarget && !rate.softwarePlaybackConversionAllowed) return source;
             auto destination = source.parent_path() / L"Variants" / decision.fileName;
             auto key = source.wstring() + L"\n" + decision.fileName;
 
@@ -358,7 +377,9 @@ namespace motion::agent
                     pending_.push_back(Request{ source, destination, decision.targetFps,
                         dimensions.first, dimensions.second, mode,
                         generation_.load(std::memory_order_relaxed), false,
-                        rate.softwareFallbackAllowed });
+                        softwarePlaybackTarget ? rate.softwarePlaybackConversionAllowed :
+                            rate.softwareFallbackAllowed,
+                        softwarePlaybackTarget });
                     condition_.notify_one();
                 }
             }
@@ -422,7 +443,7 @@ namespace motion::agent
             pending_.push_back(Request{ source, destination, decision.targetFps,
                 dimensions.first, dimensions.second, mode,
                 generation_.load(std::memory_order_relaxed), true,
-                rate.softwareFallbackAllowed });
+                rate.softwareFallbackAllowed, false });
             condition_.notify_one();
         }
 
@@ -576,7 +597,8 @@ namespace motion::agent
                                 (request.explicitRequest &&
                                 motion::read_variant_request(request.source.parent_path()) != request.mode);
                         return cancelled ? VideoTranscodeControl::cancelled : VideoTranscodeControl::running;
-                    }, error, &selectedBackend, request.softwareFallbackAllowed);
+                    }, error, &selectedBackend, request.softwareFallbackAllowed,
+                    request.softwarePlaybackTarget);
                 if (result == VideoTranscodeResult::cancelled || result == VideoTranscodeResult::paused) {
                     fs::remove(temporary, ignored);
                     return result;
@@ -599,7 +621,8 @@ namespace motion::agent
                     actual.numerator, actual.denominator, targetFps);
                 bool matchingDimensions = video_variant_dimensions_match(
                     actual.width, actual.height, request.width, request.height);
-                if (!matchingDimensions || !matchingRate) {
+                bool matchingCodec = !request.softwarePlaybackTarget || actual.softwarePlaybackFriendly;
+                if (!matchingDimensions || !matchingRate || !matchingCodec) {
                     append_log(dataRoot_, L"优化副本校验失败（实际 " +
                         std::to_wstring(actual.width) + L"x" + std::to_wstring(actual.height) + L", " +
                         std::to_wstring(actual.numerator) + L"/" + std::to_wstring(actual.denominator) +
@@ -641,9 +664,11 @@ namespace motion::agent
         : impl_(std::make_unique<Impl>(std::move(dataRoot), std::move(applicationRoot))) {}
     VideoOptimizer::~VideoOptimizer() = default;
     fs::path VideoOptimizer::Resolve(fs::path const& source, std::string const& performanceMode,
-        uint32_t targetWidth, uint32_t targetHeight, uint32_t targetRefreshRate)
+        uint32_t targetWidth, uint32_t targetHeight, uint32_t targetRefreshRate,
+        bool softwarePlaybackTarget)
     {
-        return impl_->Resolve(source, performanceMode, targetWidth, targetHeight, targetRefreshRate);
+        return impl_->Resolve(source, performanceMode, targetWidth, targetHeight, targetRefreshRate,
+            softwarePlaybackTarget);
     }
     void VideoOptimizer::Prepare(fs::path const& source, std::string const& performanceMode,
         uint32_t targetWidth, uint32_t targetHeight, uint32_t targetRefreshRate)

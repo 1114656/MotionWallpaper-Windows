@@ -437,7 +437,7 @@ namespace motion
             (!runtime.activeMediaId.empty() && !valid_id(runtime.activeMediaId))) return std::nullopt;
         if (runtime.activeGroupId.empty() != runtime.activeMediaId.empty()) return std::nullopt;
         if (runtime.decodePath != "" && runtime.decodePath != "probing" &&
-            runtime.decodePath != "hardware" && runtime.decodePath != "software" &&
+            runtime.decodePath != "automatic" && runtime.decodePath != "hardware" && runtime.decodePath != "software" &&
             runtime.decodePath != "software-fallback" && runtime.decodePath != "unavailable" &&
             runtime.decodePath != "not-applicable") return std::nullopt;
         return runtime;

@@ -4,7 +4,7 @@
 
 1. 导入源文件时逐字节复制，不对源文件转码、缩放或覆盖。
 2. 自动平衡和低功耗文件属于可删除的派生副本；用户也可以在至少保留一个可播放副本时单独删除源文件。
-3. 安装版媒体库位于 `%LOCALAPPDATA%\MotionWallpaper\Wallpapers`；带 `portable.mode` 标记或已有旧数据目录的便携版继续使用程序目录。
+3. 安装版和便携版统一把媒体库、设置与日志保存在程序目录；安装器负责迁移并清理旧的 `%LOCALAPPDATA%\MotionWallpaper` 数据。
 4. 常驻 Agent 只负责策略，不承载 WinUI，也不解码视频帧。
 5. 桌面、动态屏保和冻结画面复用同一条 Renderer 时间线。
 6. `Win+L` 会停止 Renderer，不能被当作闲置屏保处理。
@@ -28,7 +28,7 @@
 ## 存储结构
 
 ```text
-%LOCALAPPDATA%\MotionWallpaper\
+{安装目录}\App\
 ├─ Wallpapers\Groups\{group-id}\
 │  ├─ group.json
 │  └─ Videos\{media-id}\
@@ -38,12 +38,14 @@
 │     └─ Variants\
 │        ├─ balanced-*.mp4
 │        └─ power-*.mp4
-└─ Config\
-   ├─ settings.json               # 仅设置应用写入
-   └─ runtime.json                # 活动媒体，仅 Agent 写入
+├─ Config\
+│  ├─ settings.json               # 仅设置应用写入
+│  ├─ runtime.json                # 活动媒体，仅 Agent 写入
+│  └─ agent.log                   # Agent 与性能副本生成日志
+└─ portable.mode                  # 单目录数据模式标记
 ```
 
-安装目录只包含只读运行负载，内部 Agent、Renderer、WinUI 依赖和 FFmpeg 位于 `{安装目录}\App`。便携包根目录包含 `portable.mode`，因此仍采用程序旁的同一数据结构；发现旧版 `Wallpapers` 或 `Config` 时也自动保持原路径。
+内部 Agent、Renderer、WinUI 依赖和 FFmpeg 位于 `{安装目录}\App`，`Config` 与 `Wallpapers` 也位于该目录。安装版和便携包都包含 `portable.mode`，因此采用一致的数据结构；安装器升级时从旧 LocalAppData 位置迁移数据，卸载时删除整个程序与数据目录。
 
 如果两个性能档位生成的内容与规格完全一致，可以通过硬链接共享一个物理文件。界面仍显示两个逻辑档位，但容量统计按物理文件去重。
 

@@ -6,6 +6,9 @@
 
 namespace motion::agent
 {
+    inline constexpr uint32_t responsive_wait_ms = 50;
+    inline constexpr uint32_t stable_wait_ms = 1000;
+
     enum class RuntimeAction
     {
         DisplayOff,
@@ -42,5 +45,24 @@ namespace motion::agent
         if (signals.covered && !settings.continueWhenCovered) return RuntimeAction::DesktopPaused;
         if (!settings.activePlaybackEnabled) return RuntimeAction::DesktopFrozen;
         return RuntimeAction::DesktopPlay;
+    }
+
+    // Renderer ACKs and short media-library transactions need a responsive
+    // retry. Once the requested state is acknowledged, window, settings,
+    // session and power events wake the Agent immediately; a one-second poll
+    // is only a safety net and avoids a permanent 20 Hz policy loop.
+    [[nodiscard]] constexpr uint32_t runtime_wait_interval_ms(
+        bool targetReady, bool shortTransaction = false) noexcept
+    {
+        return targetReady && !shortTransaction ? stable_wait_ms : responsive_wait_ms;
+    }
+
+    // Transcoding is optional background work. Never start or continue it on
+    // battery; the selected playback tier remains unchanged and any durable
+    // request resumes when AC power returns.
+    [[nodiscard]] constexpr bool variant_generation_allowed(
+        bool onBattery, bool priorityRequest, bool playbackIdle) noexcept
+    {
+        return !onBattery && (priorityRequest || playbackIdle);
     }
 }

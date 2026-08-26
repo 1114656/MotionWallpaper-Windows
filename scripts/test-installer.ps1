@@ -15,28 +15,15 @@ if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) {
     throw "安装器不存在：$InstallerPath"
 }
 
-$running = @(Get-Process -Name 'MotionWallpaper', 'motionwallpaper-agent', 'motionwallpaper-renderer' -ErrorAction SilentlyContinue)
-if ($running) {
-    throw '安装器测试前请先退出正在运行的 MotionWallpaper。'
-}
-
-$uninstallRoots = @(
-    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-)
-$existingInstall = @(Get-ItemProperty -Path $uninstallRoots -ErrorAction SilentlyContinue | Where-Object {
-    $_.DisplayName -eq 'MotionWallpaper' -or $_.PSChildName -like '*F2984836-8AAC-4A5E-B137-69472F784A32*'
-})
-if ($existingInstall) {
-    throw '检测到已安装的 MotionWallpaper。为避免覆盖用户安装，已取消冒烟测试。'
-}
-
 $temporaryBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
 $testRoot = Join-Path $temporaryBase ("MotionWallpaper-installer-test-" + [guid]::NewGuid().ToString('N'))
 $installRoot = Join-Path $testRoot 'custom install path'
+$legacyRoot = Join-Path $testRoot 'legacy-data'
 $installLog = Join-Path $testRoot 'install.log'
 $uninstaller = Join-Path $installRoot 'unins000.exe'
+$compiler = Join-Path $root '.tools\InnoSetup\ISCC.exe'
+$installerScript = Join-Path $root 'installer\MotionWallpaper.iss'
+$smokeInstaller = Join-Path $testRoot 'MotionWallpaper-installer-smoke.exe'
 
 function Get-AssociatedIconHash([string]$Path) {
     $icon = [Drawing.Icon]::ExtractAssociatedIcon($Path)
@@ -60,8 +47,20 @@ function Get-AssociatedIconHash([string]$Path) {
 
 try {
     New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
-    $install = Start-Process -FilePath $InstallerPath -ArgumentList @(
+    New-Item -ItemType Directory -Path (Join-Path $legacyRoot 'Config') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $legacyRoot 'Wallpapers\Groups\legacy-group') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $legacyRoot 'Config\settings.json'), '{"version":1}')
+    [IO.File]::WriteAllText((Join-Path $legacyRoot 'Wallpapers\Groups\legacy-group\group.json'), '{"version":1}')
+
+    & $compiler "/DMyAppVersion=$version" '/DMyAppId={{1D39CB35-4E75-46D0-B117-934E57415E50}' `
+        "/DLegacyDataRoot=$legacyRoot" '/DInstallerSmokeTest=1' "/O$testRoot" '/FMotionWallpaper-installer-smoke' $installerScript
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $smokeInstaller -PathType Leaf)) {
+        throw "隔离测试安装器编译失败，退出码：$LASTEXITCODE"
+    }
+
+    $install = Start-Process -FilePath $smokeInstaller -ArgumentList @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/LANG=chinesesimp',
+        '/NOCLOSEAPPLICATIONS',
         "/DIR=`"$installRoot`"", "/LOG=`"$installLog`""
     ) -WindowStyle Hidden -Wait -PassThru
     if ($install.ExitCode -ne 0) { throw "静默安装失败，退出码：$($install.ExitCode)" }
@@ -77,10 +76,17 @@ try {
     if ($appIconHash -ne $agentIconHash) {
         throw '常驻 Agent 没有使用与主程序相同的托盘图标资源。'
     }
-    foreach ($forbidden in @('portable.mode', 'Config', 'Wallpapers')) {
-        if (Test-Path -LiteralPath (Join-Path $appRoot $forbidden)) {
-            throw "安装目录出现不应存在的项目：$forbidden"
+    if (-not (Test-Path -LiteralPath (Join-Path $appRoot 'portable.mode') -PathType Leaf)) {
+        throw '安装负载缺少单目录数据标记 portable.mode。'
+    }
+    foreach ($migrated in @('Config\settings.json', 'Wallpapers\Groups\legacy-group\group.json')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $appRoot $migrated) -PathType Leaf)) {
+            throw "安装器没有迁移旧数据：$migrated"
         }
+    }
+    $legacyRemainders = @(Get-ChildItem -LiteralPath $legacyRoot -Force -ErrorAction SilentlyContinue)
+    if ($legacyRemainders.Count -gt 0) {
+        throw "迁移成功后仍残留旧数据：$($legacyRemainders.Name -join ', ')"
     }
 
     $muiRoots = @(Get-ChildItem -LiteralPath $appRoot -Recurse -File -Filter '*.mui' | ForEach-Object {
@@ -97,6 +103,10 @@ try {
     if (-not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
         throw '安装后缺少卸载程序。'
     }
+    New-Item -ItemType Directory -Path (Join-Path $appRoot 'Config') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $appRoot 'Wallpapers\Groups\installer-smoke-test') -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $appRoot 'Config\agent.log'), "smoke test`r`n")
+    [IO.File]::WriteAllText((Join-Path $appRoot 'Wallpapers\Groups\installer-smoke-test\group.json'), '{}')
     $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
     ) -WindowStyle Hidden -Wait -PassThru
@@ -106,7 +116,7 @@ try {
         throw "卸载后仍残留安装目录：$installRoot"
     }
 
-    Write-Host "安装器冒烟测试通过：中英文资源、干净目录、自定义路径和卸载均正常。"
+    Write-Host "安装器冒烟测试通过：中英文资源、单目录数据、自定义路径和完整卸载均正常。"
 } finally {
     if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
         Start-Process -FilePath $uninstaller -ArgumentList @(

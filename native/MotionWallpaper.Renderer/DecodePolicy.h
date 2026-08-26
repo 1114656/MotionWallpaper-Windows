@@ -4,13 +4,17 @@
 
 namespace motion::renderer
 {
-    enum class DecodePath { Hardware, Software, Unavailable };
+    enum class DecodePath { Automatic, Hardware, Software };
 
-    [[nodiscard]] constexpr DecodePath select_decode_path(
-        std::wstring_view requestedMode, bool hardwareDecoderAvailable) noexcept
+    [[nodiscard]] constexpr DecodePath select_decode_path(std::wstring_view requestedMode) noexcept
     {
         if (requestedMode == L"software") return DecodePath::Software;
-        if (hardwareDecoderAvailable) return DecodePath::Hardware;
-        return requestedMode == L"hardware" ? DecodePath::Unavailable : DecodePath::Software;
+        if (requestedMode == L"hardware") return DecodePath::Hardware;
+        return DecodePath::Automatic;
+    }
+
+    [[nodiscard]] constexpr bool allows_software_device_fallback(DecodePath path) noexcept
+    {
+        return path == DecodePath::Automatic;
     }
 }

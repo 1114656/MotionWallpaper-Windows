@@ -55,11 +55,13 @@ namespace
     }
 
     void append_system_memory_input(std::vector<std::wstring>& arguments,
-        fs::path const& source, uint32_t width, uint32_t height, std::wstring const& format)
+        fs::path const& source, uint32_t width, uint32_t height, uint32_t targetFps,
+        std::wstring const& format)
     {
         arguments.insert(arguments.end(), {
             L"-i", source.wstring(), L"-map", L"0:v:0", L"-map_metadata", L"0", L"-an", L"-vf",
-            L"scale=" + std::to_wstring(width) + L":" + std::to_wstring(height) +
+            L"fps=" + std::to_wstring(targetFps) + L",scale=" +
+                std::to_wstring(width) + L":" + std::to_wstring(height) +
                 L":flags=lanczos,format=" + format
         });
     }
@@ -102,7 +104,7 @@ namespace
             append_bounded_rate(arguments, bitrate);
             break;
         case VideoTranscodeBackend::nvidiaNvenc:
-            append_system_memory_input(arguments, source, width, height, L"p010le");
+            append_system_memory_input(arguments, source, width, height, targetFps, L"p010le");
             arguments.insert(arguments.end(), {
                 L"-c:v", L"hevc_nvenc", L"-preset", L"p5", L"-tune", L"hq",
                 L"-profile:v", L"main10", L"-rc", L"vbr", L"-cq", L"21",
@@ -111,7 +113,7 @@ namespace
             append_bounded_rate(arguments, bitrate);
             break;
         case VideoTranscodeBackend::intelQsv:
-            append_system_memory_input(arguments, source, width, height, L"p010le");
+            append_system_memory_input(arguments, source, width, height, targetFps, L"p010le");
             arguments.insert(arguments.end(), {
                 L"-c:v", L"hevc_qsv", L"-preset", L"slow", L"-profile:v", L"main10",
                 L"-scenario", L"archive", L"-global_quality", L"21"
@@ -119,7 +121,7 @@ namespace
             append_bounded_rate(arguments, bitrate);
             break;
         case VideoTranscodeBackend::amdAmf:
-            append_system_memory_input(arguments, source, width, height, L"p010le");
+            append_system_memory_input(arguments, source, width, height, targetFps, L"p010le");
             arguments.insert(arguments.end(), {
                 L"-c:v", L"hevc_amf", L"-usage", L"high_quality", L"-quality", L"quality",
                 L"-profile:v", L"main10", L"-bitdepth", L"10", L"-rc", L"qvbr",
@@ -128,15 +130,23 @@ namespace
             append_bounded_rate(arguments, bitrate);
             break;
         case VideoTranscodeBackend::softwareKvazaar:
-            append_system_memory_input(arguments, source, width, height, L"yuv420p");
+            append_system_memory_input(arguments, source, width, height, targetFps, L"yuv420p");
             arguments.insert(arguments.end(), {
                 L"-c:v", L"libkvazaar", L"-kvazaar-params", L"threads=4"
             });
             append_bounded_rate(arguments, bitrate);
             break;
+        case VideoTranscodeBackend::softwareOpenH264:
+            append_system_memory_input(arguments, source, width, height, targetFps, L"yuv420p");
+            arguments.insert(arguments.end(), {
+                L"-c:v", L"libopenh264", L"-profile:v", L"high", L"-threads", L"2"
+            });
+            append_bounded_rate(arguments, bitrate);
+            break;
         }
         arguments.insert(arguments.end(), {
-            L"-r", std::to_wstring(targetFps), L"-fps_mode", L"cfr", L"-tag:v", L"hvc1",
+            L"-r", std::to_wstring(targetFps), L"-fps_mode", L"cfr", L"-tag:v",
+            backend == VideoTranscodeBackend::softwareOpenH264 ? L"avc1" : L"hvc1",
             L"-movflags", L"+faststart", destination.wstring()
         });
         return arguments;
@@ -213,8 +223,21 @@ namespace motion::agent
         uint32_t height,
         uint32_t targetFps,
         bool adapterProbeSucceeded,
-        bool softwareFallbackAllowed)
+        bool softwareFallbackAllowed,
+        bool softwarePlaybackTarget)
     {
+        auto pixelRate = static_cast<uint64_t>(width) * height * targetFps;
+        auto longEdge = (std::max)(width, height);
+        auto shortEdge = (std::min)(width, height);
+        if (softwarePlaybackTarget) {
+            if (softwareFallbackAllowed && width && height && targetFps &&
+                pixelRate <= static_cast<uint64_t>(1920) * 1080 * 60 &&
+                longEdge <= 1920 && shortEdge <= 1080 && targetFps <= 60) {
+                return { VideoTranscodeBackend::softwareOpenH264 };
+            }
+            return {};
+        }
+
         std::stable_sort(adapters.begin(), adapters.end(), [](auto const& left, auto const& right) {
             return left.dedicatedVideoMemory > right.dedicatedVideoMemory;
         });
@@ -238,9 +261,6 @@ namespace motion::agent
             appendVendor(vendorAmd);
         }
 
-        auto pixelRate = static_cast<uint64_t>(width) * height * targetFps;
-        auto longEdge = (std::max)(width, height);
-        auto shortEdge = (std::min)(width, height);
         if (softwareFallbackAllowed && width && height && targetFps && pixelRate <= softwarePixelRateLimit &&
             longEdge <= 2560 && shortEdge <= 1440 && targetFps <= 60) {
             result.push_back(VideoTranscodeBackend::softwareKvazaar);
@@ -256,6 +276,7 @@ namespace motion::agent
         case VideoTranscodeBackend::intelQsv: return L"Intel Quick Sync";
         case VideoTranscodeBackend::amdAmf: return L"AMD AMF";
         case VideoTranscodeBackend::softwareKvazaar: return L"软件 HEVC";
+        case VideoTranscodeBackend::softwareOpenH264: return L"软件 H.264（OpenH264）";
         }
         return L"未知后端";
     }
@@ -270,7 +291,8 @@ namespace motion::agent
         std::function<VideoTranscodeControl()> const& control,
         std::wstring& error,
         std::wstring* selectedBackend,
-        bool softwareFallbackAllowed)
+        bool softwareFallbackAllowed,
+        bool softwarePlaybackTarget)
     {
         if (selectedBackend) selectedBackend->clear();
         std::error_code fileError;
@@ -285,9 +307,12 @@ namespace motion::agent
 
         bool adapterProbeSucceeded{};
         auto backends = video_transcode_backend_order(installed_adapters(adapterProbeSucceeded),
-            width, height, targetFps, adapterProbeSucceeded, softwareFallbackAllowed);
+            width, height, targetFps, adapterProbeSucceeded, softwareFallbackAllowed,
+            softwarePlaybackTarget);
         if (backends.empty()) {
-            error = L"没有可用的硬件编码器；该规格超过软件编码的安全上限";
+            error = softwarePlaybackTarget
+                ? L"该视频无法安全转换为 CPU 流畅副本"
+                : L"没有可用的硬件编码器；该规格超过软件编码的安全上限";
             return VideoTranscodeResult::unsupported;
         }
 

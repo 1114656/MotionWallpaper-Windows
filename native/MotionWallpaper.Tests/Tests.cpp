@@ -4,11 +4,13 @@
 #include "../MotionWallpaper.Agent/RuntimePolicy.h"
 #include "../MotionWallpaper.Agent/CoveragePolicy.h"
 #include "../MotionWallpaper.Agent/IdlePolicy.h"
+#include "../MotionWallpaper.Agent/PlaybackCapabilityPolicy.h"
 #include "../MotionWallpaper.Agent/SharedRendererPolicy.h"
 #include "../MotionWallpaper.Agent/VideoVariantPolicy.h"
 #include "../MotionWallpaper.Agent/VideoTranscoder.h"
 #include "../MotionWallpaper.Renderer/ResidencyPolicy.h"
 #include "../MotionWallpaper.Renderer/FrameTiming.h"
+#include "../MotionWallpaper.Renderer/SoftwareFramePolicy.h"
 #include "../MotionWallpaper.Renderer/DecodePolicy.h"
 #include "../MotionWallpaper.Renderer/FrameScheduler.h"
 #include "../MotionWallpaper.Renderer/AdapterPolicy.h"
@@ -300,6 +302,73 @@ namespace
             "low-memory pause no longer releases decoder resources promptly");
     }
 
+    void stable_agent_states_do_not_poll_at_twenty_hertz()
+    {
+        require(motion::agent::runtime_wait_interval_ms(false) == 50,
+            "pending Renderer transitions lost their responsive ACK retry");
+        require(motion::agent::runtime_wait_interval_ms(true) == 1000,
+            "stable playback still wakes the Agent policy loop at high frequency");
+        require(motion::agent::runtime_wait_interval_ms(true, true) == 50,
+            "short media-library transactions lost their responsive hold interval");
+    }
+
+    void battery_power_pauses_optional_variant_generation()
+    {
+        require(!motion::agent::variant_generation_allowed(true, true, true),
+            "battery power still allows background video transcoding");
+        require(motion::agent::variant_generation_allowed(false, true, false),
+            "an AC-powered priority performance-copy request was blocked");
+        require(motion::agent::variant_generation_allowed(false, false, true),
+            "AC-powered idle time no longer permits deferred performance-copy work");
+        require(!motion::agent::variant_generation_allowed(false, false, false),
+            "non-priority transcoding competes with active playback");
+    }
+
+    void playback_capability_only_degrades_software_devices()
+    {
+        require(!motion::agent::uses_software_playback("auto", true),
+            "automatic playback downgraded a physical video device");
+        require(motion::agent::uses_software_playback("auto", false) &&
+            motion::agent::uses_software_playback("software", true),
+            "WARP-only or explicitly software playback missed the CPU profile");
+        require(!motion::agent::uses_software_playback("hardware", false),
+            "strict hardware mode silently changed into software playback");
+
+        auto strong = motion::agent::software_playback_profile(true, 16, 2560, 1600, 165);
+        require(strong.enabled && strong.width == 1728 && strong.height == 1080 && strong.frameRate == 60,
+            "a strong CPU did not receive the bounded 1080p60 smoothness profile");
+        auto medium = motion::agent::software_playback_profile(true, 8, 2560, 1440, 144);
+        require(medium.width == 1280 && medium.height == 720 && medium.frameRate == 60,
+            "a mid-range CPU did not receive the 720p60 smoothness profile");
+        auto modest = motion::agent::software_playback_profile(true, 4, 2560, 1440, 144);
+        require(modest.width == 1280 && modest.height == 720 && modest.frameRate == 30,
+            "a modest CPU was assigned more than the 720p30 safety budget");
+        auto weak = motion::agent::software_playback_profile(true, 2, 2560, 1440, 60);
+        require(weak.width == 854 && weak.height == 480 && weak.frameRate == 30,
+            "a weak CPU was assigned more than the 480p30 safety budget");
+        require(!motion::agent::software_playback_profile(false, 2, 7680, 4320, 240).enabled,
+            "physical-GPU playback was unexpectedly constrained by CPU tiering");
+    }
+
+    void software_presentation_governor_recovers_without_catchup_bursts()
+    {
+        require(motion::renderer::software_probe_interval_ms(60) == 17 &&
+            motion::renderer::software_probe_interval_ms(30) == 33,
+            "software frame pacing no longer has bounded 60/30 FPS waits");
+        motion::renderer::SoftwareFrameGovernor governor;
+        governor.Configure(60);
+        for (int index = 0; index < 7; ++index) {
+            require(!governor.Observe(14'000), "software frame cap reacted to a single transient too early");
+        }
+        require(governor.Observe(14'000) && governor.ActiveFrameRate() == 30,
+            "repeated WARP deadline misses did not reduce presentation pressure");
+        for (int index = 0; index < 299; ++index) {
+            require(!governor.Observe(5'000), "software frame cap recovered before ten stable seconds");
+        }
+        require(governor.Observe(5'000) && governor.ActiveFrameRate() == 60,
+            "software frame cap did not recover after sustained headroom");
+    }
+
     void screensaver_pause_returns_window_to_desktop()
     {
         using motion::renderer::Command;
@@ -364,6 +433,11 @@ namespace
         require(grouped.size() == 3,
             "the same wallpaper was incorrectly shared across display adapters");
 
+        auto firstUnknown = motion::agent::renderer_adapter_key({}, L"\\\\.\\DISPLAY5");
+        auto secondUnknown = motion::agent::renderer_adapter_key({}, L"\\\\.\\DISPLAY6");
+        require(!firstUnknown.empty() && firstUnknown != secondUnknown,
+            "unknown indirect-display adapters collapse into one Renderer route");
+
         grouped = motion::agent::group_renderer_routes({ { shared, {} } }, false);
         require(grouped.size() == 1 && grouped.front().monitorDevices.empty(),
             "primary-only rendering unexpectedly retained a monitor route");
@@ -382,6 +456,10 @@ namespace
             "HDR transfer metadata was ignored by the software fallback guard");
         require(!motion::agent::video_software_fallback_allowed(VideoSourceCodec::Unknown, false, 0, false, true),
             "BT.2020 primaries were ignored by the software fallback guard");
+        require(motion::agent::video_cpu_conversion_allowed(false, false) &&
+            !motion::agent::video_cpu_conversion_allowed(true, false) &&
+            !motion::agent::video_cpu_conversion_allowed(false, true),
+            "CPU compatibility copies no longer distinguish SDR Main10 from HDR/BT.2020");
         auto original = motion::agent::video_variant_decision("original");
         require(!original.targetFps && original.fileName.empty(), "original mode unexpectedly requested a proxy");
         auto balanced = motion::agent::video_variant_decision("balanced", 2560, 1440, 240, 1, 165);
@@ -393,6 +471,9 @@ namespace
         auto powerSaver = motion::agent::video_variant_decision("power-saver", 2560, 1440, 240, 1, 165);
         require(powerSaver.targetFps == 60 && powerSaver.fileName == L"power-saver-60-2560x1440-v4.mp4",
             "power saver did not retain its explicit 60 FPS policy");
+        auto cpuSmooth = motion::agent::video_variant_decision("cpu-smooth", 1280, 720, 240, 1, 60);
+        require(cpuSmooth.targetFps == 60 && cpuSmooth.fileName == L"cpu-smooth-60-1280x720-v5.mp4",
+            "software playback did not receive its isolated CPU-friendly cache identity");
         auto nativeRate = motion::agent::video_variant_decision("balanced", 2560, 1440, 30, 1, 165);
         require(nativeRate.targetFps == 30, "balanced mode inserted frames missing from the source");
         require(motion::agent::video_variant_rate_matches(60'000, 1'001, 60),
@@ -413,6 +494,12 @@ namespace
         auto native = motion::agent::video_variant_dimensions(3'840, 2'160, 3'840, 2'160);
         require(native.first == 3'840 && native.second == 2'160,
             "display-aware variant unexpectedly upscaled or cropped a native 4K target");
+        auto cpuWide = motion::agent::video_cpu_variant_dimensions(3'840, 720, 1'920, 1'080);
+        require(cpuWide.first == 1'920 && cpuWide.second == 360,
+            "ultrawide CPU playback escaped the hard software pixel budget");
+        auto cpuPortrait = motion::agent::video_cpu_variant_dimensions(2'160, 3'840, 1'080, 1'920);
+        require(cpuPortrait.first == 1'080 && cpuPortrait.second == 1'920,
+            "portrait CPU playback no longer preserves source aspect ratio");
     }
 
     void variant_requests_use_last_writer_wins(fs::path const& root)
@@ -541,6 +628,14 @@ namespace
         require(motion::agent::video_transcode_backend_order({}, 3840, 2160, 60).empty(),
             "unsafe 4K software encoding was scheduled on a CPU-only system");
 
+        auto cpuPlayback = motion::agent::video_transcode_backend_order(
+            {}, 1920, 1080, 60, true, true, true);
+        require(cpuPlayback.size() == 1 && cpuPlayback[0] == VideoTranscodeBackend::softwareOpenH264,
+            "CPU playback copy did not force the broadly decodable H.264 encoder");
+        require(motion::agent::video_transcode_backend_order(
+            {}, 1920, 1080, 60, true, false, true).empty(),
+            "HDR or high-bit-depth video was destructively converted for CPU playback");
+
         auto unknownProbe = motion::agent::video_transcode_backend_order({}, 2560, 1440, 120, false);
         require(unknownProbe.size() == 4 &&
             unknownProbe[0] == VideoTranscodeBackend::nvidiaCudaNvenc &&
@@ -665,6 +760,10 @@ namespace
             "status decode software-fallback fallback-no-hardware-decoder");
         require(decode.path == "software-fallback" && decode.reason == "fallback-no-hardware-decoder",
             "renderer decode status was not parsed");
+        auto automatic = motion::protocol::parse_decode_status(
+            "status decode automatic dxgi-manager-enabled");
+        require(automatic.path == "automatic" && automatic.reason == "dxgi-manager-enabled",
+            "automatic DXGI decode status was not parsed");
         require(motion::protocol::parse_decode_status("status decode hardware").path.empty(),
             "incomplete renderer decode status was accepted");
     }
@@ -672,14 +771,16 @@ namespace
     void decode_modes_have_distinct_fallback_contracts()
     {
         using motion::renderer::DecodePath;
-        require(motion::renderer::select_decode_path(L"auto", true) == DecodePath::Hardware,
-            "automatic decode ignored an available hardware decoder");
-        require(motion::renderer::select_decode_path(L"auto", false) == DecodePath::Software,
-            "automatic decode no longer falls back to software");
-        require(motion::renderer::select_decode_path(L"hardware", false) == DecodePath::Unavailable,
-            "strict hardware decode silently fell back to software");
-        require(motion::renderer::select_decode_path(L"software", true) == DecodePath::Software,
-            "explicit software decode was overridden by hardware availability");
+        require(motion::renderer::select_decode_path(L"auto") == DecodePath::Automatic,
+            "automatic decode no longer delegates selection to the DXGI-backed media engine");
+        require(motion::renderer::select_decode_path(L"hardware") == DecodePath::Hardware,
+            "explicit hardware decode no longer selects the physical GPU path");
+        require(motion::renderer::select_decode_path(L"software") == DecodePath::Software,
+            "explicit software decode no longer selects the WARP path");
+        require(motion::renderer::allows_software_device_fallback(DecodePath::Automatic) &&
+            !motion::renderer::allows_software_device_fallback(DecodePath::Hardware) &&
+            !motion::renderer::allows_software_device_fallback(DecodePath::Software),
+            "software-device fallback is no longer restricted to automatic decode");
     }
 
     std::string read_protocol_line(HANDLE pipe, std::chrono::milliseconds timeout)
@@ -848,6 +949,22 @@ namespace
             loadedRuntime->decodePath == "software-fallback" &&
             loadedRuntime->decodeReason == "fallback-no-hardware-decoder",
             "settings publication overwrote runtime selection");
+    }
+
+    void automatic_decode_runtime_round_trips(fs::path const& root)
+    {
+        auto path = root / L"automatic-runtime.json";
+        motion::RuntimeState runtime;
+        runtime.activeGroupId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        runtime.activeMediaId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+        runtime.decodePath = "automatic";
+        runtime.decodeReason = "dxgi-manager-enabled";
+        motion::save_runtime(path, runtime);
+
+        auto loaded = motion::load_runtime(path);
+        require(loaded && loaded->decodePath == "automatic" &&
+            loaded->decodeReason == "dxgi-manager-enabled",
+            "automatic DXGI decode status did not survive runtime publication");
     }
 
     void concurrent_settings_writers_never_publish_torn_json(fs::path const& root)
@@ -1161,12 +1278,15 @@ namespace
 int wmain(int argc, wchar_t** argv)
 {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    if (argc == 8 && std::wstring_view(argv[1]) == L"--transcode-video") {
+    if (argc == 8 && (std::wstring_view(argv[1]) == L"--transcode-video" ||
+        std::wstring_view(argv[1]) == L"--transcode-cpu-video")) {
+        bool cpuPlayback = std::wstring_view(argv[1]) == L"--transcode-cpu-video";
         std::wstring error;
         auto result = motion::agent::transcode_video(
             argv[2], argv[3], argv[4], static_cast<uint32_t>(_wtoi(argv[5])),
             static_cast<uint32_t>(_wtoi(argv[6])), static_cast<uint32_t>(_wtoi(argv[7])),
-            [] { return motion::agent::VideoTranscodeControl::running; }, error);
+            [] { return motion::agent::VideoTranscodeControl::running; }, error,
+            nullptr, true, cpuPlayback);
         std::wcout << static_cast<int>(result) << L" " << error << L'\n';
         return result == motion::agent::VideoTranscodeResult::succeeded ? 0 : 3;
     }
@@ -1218,6 +1338,10 @@ int wmain(int argc, wchar_t** argv)
         RUN_TEST(display_off_waits_for_the_post_lock_delay());
         RUN_TEST(fullscreen_coverage_is_not_limited_to_foreground());
         RUN_TEST(normal_pause_keeps_decoder_hot());
+        RUN_TEST(stable_agent_states_do_not_poll_at_twenty_hertz());
+        RUN_TEST(battery_power_pauses_optional_variant_generation());
+        RUN_TEST(playback_capability_only_degrades_software_devices());
+        RUN_TEST(software_presentation_governor_recovers_without_catchup_bursts());
         RUN_TEST(screensaver_pause_returns_window_to_desktop());
         RUN_TEST(desktop_host_must_cover_the_virtual_screen());
         RUN_TEST(manual_selection_wins_over_group_randomization());
@@ -1233,6 +1357,7 @@ int wmain(int argc, wchar_t** argv)
         RUN_TEST(renderer_process_uses_typed_acks(root));
         RUN_TEST(renderer_exits_when_agent_pipe_closes(root));
         RUN_TEST(settings_and_runtime_have_single_writers(root));
+        RUN_TEST(automatic_decode_runtime_round_trips(root));
         RUN_TEST(concurrent_settings_writers_never_publish_torn_json(root));
         RUN_TEST(corrupt_files_preserve_last_known_good(root));
         RUN_TEST(media_library_operations_are_safe(root));

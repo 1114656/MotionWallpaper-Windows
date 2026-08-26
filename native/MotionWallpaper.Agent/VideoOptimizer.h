@@ -19,7 +19,8 @@ namespace motion::agent
         [[nodiscard]] std::filesystem::path Resolve(
             std::filesystem::path const& source, std::string const& performanceMode,
             uint32_t targetWidth = 0, uint32_t targetHeight = 0,
-            uint32_t targetRefreshRate = 0);
+            uint32_t targetRefreshRate = 0,
+            bool softwarePlaybackTarget = false);
         void Prepare(std::filesystem::path const& source, std::string const& performanceMode,
             uint32_t targetWidth = 0, uint32_t targetHeight = 0,
             uint32_t targetRefreshRate = 0);

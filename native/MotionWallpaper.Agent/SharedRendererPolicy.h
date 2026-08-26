@@ -27,6 +27,18 @@ namespace motion::agent
         return path.wstring() + L"\n" + std::wstring(kind.begin(), kind.end());
     }
 
+    [[nodiscard]] inline std::wstring renderer_adapter_key(
+        std::wstring adapterKey, std::wstring const& monitorDevice)
+    {
+        if (!adapterKey.empty()) return adapterKey;
+        // Indirect displays, wireless projection, Remote Desktop and some
+        // DisplayLink drivers do not expose a matching IDXGIOutput. Keep each
+        // unknown display isolated instead of treating all empty LUIDs as one
+        // adapter and accidentally sharing a cross-device Renderer.
+        return monitorDevice.empty() ? std::wstring(L"unknown-display") :
+            L"display:" + monitorDevice;
+    }
+
     [[nodiscard]] inline std::vector<SharedRendererRoute> group_renderer_routes(
         std::vector<RendererRoute> const& routes, bool includeMonitorDevices)
     {

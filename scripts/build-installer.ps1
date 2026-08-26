@@ -45,6 +45,7 @@ $required = @(
     'MotionWallpaper.exe',
     'motionwallpaper-agent.exe',
     'motionwallpaper-renderer.exe',
+    'portable.mode',
     'LICENSE.txt',
     'THIRD_PARTY_NOTICES.md',
     'Tools\ffmpeg\ffmpeg.exe'

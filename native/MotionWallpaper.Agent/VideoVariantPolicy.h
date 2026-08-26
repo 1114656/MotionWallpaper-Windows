@@ -7,6 +7,12 @@
 
 namespace motion::agent
 {
+    [[nodiscard]] constexpr bool video_cpu_conversion_allowed(
+        bool hdrTransfer, bool bt2020Primaries) noexcept
+    {
+        return !hdrTransfer && !bt2020Primaries;
+    }
+
     enum class VideoSourceCodec { Unknown, H264, Hevc };
 
     [[nodiscard]] constexpr bool video_software_fallback_allowed(
@@ -36,8 +42,9 @@ namespace motion::agent
         uint32_t displayRefreshRate = 0)
     {
         if (performanceMode == "original") return {};
-        uint32_t cap = performanceMode == "power-saver"
-            ? 60u
+        bool cpuSmooth = performanceMode == "cpu-smooth";
+        uint32_t cap = performanceMode == "power-saver" || cpuSmooth
+            ? (std::min)(60u, displayRefreshRate ? displayRefreshRate : 60u)
             : (std::min)(120u, displayRefreshRate ? displayRefreshRate : 120u);
         uint32_t sourceFps = sourceRateNumerator && sourceRateDenominator
             ? static_cast<uint32_t>((static_cast<uint64_t>(sourceRateNumerator) + sourceRateDenominator / 2) /
@@ -47,6 +54,9 @@ namespace motion::agent
         auto dimensions = width && height
             ? L"-" + std::to_wstring(width) + L"x" + std::to_wstring(height)
             : std::wstring{};
+        if (cpuSmooth) {
+            return { targetFps, L"cpu-smooth-" + std::to_wstring(targetFps) + dimensions + L"-v5.mp4" };
+        }
         if (performanceMode == "power-saver") {
             return { targetFps, L"power-saver-" + std::to_wstring(targetFps) + dimensions + L"-v4.mp4" };
         }
@@ -75,6 +85,35 @@ namespace motion::agent
         }
         width = (width + 1u) & ~1u;
         height = (height + 1u) & ~1u;
+        return { (std::min)(width, sourceWidth), (std::min)(height, sourceHeight) };
+    }
+
+    // CPU playback has a hard pixel budget. Fit the complete source inside it
+    // and let the existing Renderer crop/scale for the display. Unlike the
+    // quality profiles, this may upscale at presentation time because decoding
+    // an oversized off-screen area defeats the compatibility fallback.
+    [[nodiscard]] constexpr std::pair<uint32_t, uint32_t> video_cpu_variant_dimensions(
+        uint32_t sourceWidth, uint32_t sourceHeight,
+        uint32_t maximumWidth, uint32_t maximumHeight) noexcept
+    {
+        if (!sourceWidth || !sourceHeight || !maximumWidth || !maximumHeight ||
+            (sourceWidth <= maximumWidth && sourceHeight <= maximumHeight)) {
+            return { sourceWidth, sourceHeight };
+        }
+        uint32_t width{};
+        uint32_t height{};
+        if (static_cast<uint64_t>(maximumWidth) * sourceHeight <=
+            static_cast<uint64_t>(maximumHeight) * sourceWidth) {
+            width = maximumWidth;
+            height = static_cast<uint32_t>((static_cast<uint64_t>(sourceHeight) * maximumWidth +
+                sourceWidth - 1) / sourceWidth);
+        } else {
+            height = maximumHeight;
+            width = static_cast<uint32_t>((static_cast<uint64_t>(sourceWidth) * maximumHeight +
+                sourceHeight - 1) / sourceHeight);
+        }
+        width = (std::max)(2u, (width + 1u) & ~1u);
+        height = (std::max)(2u, (height + 1u) & ~1u);
         return { (std::min)(width, sourceWidth), (std::min)(height, sourceHeight) };
     }
 

@@ -481,8 +481,14 @@ namespace winrt::MotionWallpaper::implementation
             ? L"已停止"
             : settings.activePlaybackEnabled ? L"正在播放" : L"已冻结省电");
         std::wstring decodeStatus;
-        if (actualDecodePath == "hardware") decodeStatus = L"硬件解码 · 已检测到适用硬解码器";
-        else if (actualDecodePath == "software-fallback") decodeStatus = L"软件解码 · 自动回退（未检测到适用硬解码器）";
+        if (actualDecodePath == "automatic") decodeStatus = L"自动解码 · 已启用 DXGI/DXVA 加速";
+        else if (actualDecodePath == "hardware") decodeStatus = L"硬件解码 · 已启用 DXGI/DXVA 加速";
+        else if (actualDecodePath == "software-fallback") decodeStatus =
+            actualDecodeReason == "no-physical-d3d11-adapter"
+            ? L"软件渲染 · 自动回退（无可用物理 D3D11 设备）"
+            : actualDecodeReason == "no-d3d11-video-support"
+            ? L"CPU 解码 · 物理 GPU 合成"
+            : L"软件解码 · 自动回退（未检测到适用硬解码器）";
         else if (actualDecodePath == "software") decodeStatus = L"软件解码 · 手动选择";
         else if (actualDecodePath == "unavailable") decodeStatus = L"硬件解码不可用 · 未检测到适用硬解码器";
         else if (actualDecodePath == "probing") decodeStatus = L"正在检测视频解码器…";

@@ -19,10 +19,10 @@ MotionWallpaper 目前处于 Alpha 阶段。WinUI 依赖固定在稳定的 Windo
 1. 完整执行 `scripts\build-native.ps1` 发布流程。
 2. 执行 `scripts\package-alpha.ps1` 和 `scripts\build-installer.ps1 -SkipBuild`，要求两种分发物验证通过。
 3. 确认两种负载只包含简体中文和英文资源，且不包含 `Wallpapers`、`Config`、日志、调试符号和本机测试证据。
-4. 静默安装到临时自定义目录，验证程序集中位于 `App`、用户数据位于 `%LOCALAPPDATA%\MotionWallpaper`，随后测试升级和卸载。
-5. 确认卸载不会删除用户壁纸和设置，也不会留下开机启动注册表值。
+4. 静默安装到临时自定义目录，验证程序、设置、日志与壁纸数据集中位于 `App`，随后测试旧数据迁移、升级和卸载。
+5. 确认卸载会删除用户壁纸和设置，且不会留下旧 LocalAppData 目录或开机启动注册表值。
 6. 上传安装 EXE、便携 ZIP 及匹配的 `.sha256` 文件，并将 GitHub Release 标记为 Pre-release。
-7. 明确标注为未签名 Alpha 软件，提醒用户注意 SmartScreen；安装版数据由卸载程序默认保留，便携版升级时需保留 `Wallpapers` 与 `Config`。
+7. 明确标注为未签名 Alpha 软件，提醒用户注意 SmartScreen；安装版卸载会清除全部数据，便携版升级时需保留 `Wallpapers` 与 `Config`。
 
 ## 未来稳定二进制版本
 
